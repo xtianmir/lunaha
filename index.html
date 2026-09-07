@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>lunaha - local-first music player for Windows</title>
+  <meta name="description" content="A fast, beautiful music player for Windows. Your local library, no ads. Listen without an account; sign in for Premium and optional online features." />
+  <!-- Deep AIR redesign (approved 2026-07-29): lunaha Mint accent, Archivo
+       Black display font, real glass panels and the shared event-driven Wave
+       background from site-wave.js. Final palette and material tokens live in
+       site-deep-air.css and are shared by all four public pages. i18n stays in
+       the inline dictionary (en/bg/de/es/fr/ru/zh, same locales as the player). -->
+  <!-- TODO before the broad public release:
+       1. Replace showcase screenshots when the final UI is ready.
+       (Checkout links went live 2026-07-03 with the tester release.) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&display=swap" rel="stylesheet" />
+  <!-- Shared cross-page config + language engine (single sources of truth). -->
+  <script src="site-config.js"></script>
+  <script src="site-lang.js"></script>
+  <!-- Shared single-source chrome: the brand lockup (site-brand.js) and the
+       download links, always the latest release (site-downloads.js). Same
+       files every page uses, so a change lands in ONE place. -->
+  <script src="site-brand.js"></script>
+  <script src="site-downloads.js"></script>
+  <script src="site-transition.js"></script>
+  <script src="site-glow.js"></script>
+  <style>
+    :root {
+      --bg: #08091a;
+      --bg-card: #141737;
+      --bg-elevated: #1d2044;
+      --glass: rgba(24, 27, 60, 0.45);
+      --glass-strong: rgba(20, 23, 55, 0.72);
+      --glass-border: rgba(133, 145, 235, 0.16);
+      /* ONE glass level for the whole site (owner decision 2026-07-18):
+         every backdrop-filter on the page reads this, so a glass change is
+         a single edit. The old stepped 18/16/14/10 scale is retired, and
+         saturate() now applies to every glass surface, not just .panel. */
+      --blur-glass: blur(18px) saturate(1.15);
+      --border: #2b2f5c;
+      --border-soft: #23264c;
+      --chip-border: #383d6e;
+      --text: #c3c6e2;
+      --text-strong: #ffffff;
+      --text-secondary: #aab0dd;
+      --text-muted: #8489b8;
+      --text-faint: #666c9e;
+      --accent: #22D3A1;
+      --accent-violet: #8f66ff;
+      --on-accent: #04160b;
+      --glow-1: rgba(34, 211, 161, 0.17);
+      --glow-2: rgba(143, 102, 255, 0.15);
+      --font-sans: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+      --font-display: "Archivo Black", "Arial Black", sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; overscroll-behavior-y: none; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      overscroll-behavior-y: none;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img { display: block; max-width: 100%; height: auto; }
+
+    /* ── Themed scrollbars (page + language menu) ── */
+    html { scrollbar-color: #2b2f5c #0a0b20; }
+    ::-webkit-scrollbar { width: 12px; height: 12px; }
+    ::-webkit-scrollbar-track { background: #0a0b20; }
+    ::-webkit-scrollbar-thumb { background: #2b2f5c; border-radius: 999px; border: 3px solid #0a0b20; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3f78; }
+    .lang-menu { scrollbar-width: thin; scrollbar-color: rgba(195, 198, 226, 0.35) transparent; }
+    .lang-menu::-webkit-scrollbar { width: 8px; }
+    .lang-menu::-webkit-scrollbar-track { background: transparent; }
+    .lang-menu::-webkit-scrollbar-thumb { background: rgba(195, 198, 226, 0.32); border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
+    .lang-menu::-webkit-scrollbar-thumb:hover { background: rgba(195, 198, 226, 0.5); background-clip: padding-box; }
+    .d {
+      font-family: var(--font-display);
+      font-weight: 400;
+      text-transform: uppercase;
+      color: var(--text-strong);
+      line-height: 1.06;
+    }
+
+    /* Legacy no-script background. The final Deep AIR palette and the
+       interactive Wave canvas are shared by site-deep-air.css/site-wave.js. */
+    .site-background {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% -20%, var(--glow-1), transparent 40%),
+        radial-gradient(circle at 22% 24%, var(--glow-1), transparent 52%),
+        radial-gradient(circle at 80% 12%, var(--glow-2), transparent 46%),
+        radial-gradient(circle at 24% 86%, var(--glow-2), transparent 46%),
+        linear-gradient(180deg, #0b0d26 0%, #08091a 46%, #060714 100%);
+    }
+
+    .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+    /* ── Pills ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      border-radius: 999px; padding: 15px 30px;
+      font-weight: 800; font-size: 15.5px; cursor: pointer;
+      transition: transform 0.12s ease, filter 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.6); }
+    .btn-primary { background: var(--accent); color: var(--on-accent); }
+    .btn-ghost { background: var(--bg-elevated); color: var(--text-strong); }
+    .btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+    /* ── Nav (links always visible, Discord-style dropdowns) ── */
+    nav { position: relative; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 22px 0; flex-wrap: wrap; }
+    .brand { display: flex; align-items: flex-end; gap: 9px; color: var(--text-strong); }
+    .brand:hover { color: var(--text-strong); text-decoration: none; }
+    .brand-mark { display: inline-flex; align-items: flex-end; gap: 2px; height: 17px; }
+    .brand-mark span { width: 3px; border-radius: 2px; background: var(--accent); }
+    .brand-mark span:nth-child(1) { height: 8px; }
+    .brand-mark span:nth-child(2) { height: 16px; }
+    .brand-mark span:nth-child(3) { height: 11px; }
+    .brand-mark span:nth-child(4) { height: 17px; }
+    .brand-mark span:nth-child(5) { height: 7px; }
+    .brand .brand-name { font-family: var(--font-display); text-transform: uppercase; font-size: 16px; }
+    nav .links { display: flex; gap: 4px; font-size: 14px; font-weight: 800; align-items: center; flex-wrap: wrap; }
+    nav .links > a, .nav-item > a { color: var(--text-strong); opacity: 0.92; padding: 8px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
+    nav .links > a:hover, .nav-item > a:hover { opacity: 1; text-decoration: none; background: rgba(133, 145, 235, 0.12); }
+    .chev { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s ease; }
+    .nav-item { position: relative; }
+    .nav-item:hover > a .chev, .nav-item:focus-within > a .chev { transform: rotate(180deg); }
+    .menu {
+      position: absolute; top: calc(100% + 8px); left: 50%;
+      transform: translate(-50%, 6px);
+      min-width: 216px; padding: 12px;
+      background: var(--glass-strong);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border: 1px solid var(--glass-border); border-radius: 18px;
+      display: flex; flex-direction: column; gap: 2px;
+      opacity: 0; visibility: hidden;
+      transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+      z-index: 50;
+    }
+    .menu::before { content: ""; position: absolute; top: -12px; left: 0; right: 0; height: 12px; }
+    .nav-item:hover .menu, .nav-item:focus-within .menu { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+    .menu-label { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); font-weight: 800; padding: 4px 12px 5px; }
+    .menu a { display: block; padding: 8px 12px; border-radius: 10px; color: var(--text-strong); font-weight: 700; font-size: 13.5px; }
+    .menu a:hover { background: rgba(34, 211, 161, 0.14); text-decoration: none; }
+
+    /* ── Hero: copy left, rotating showcase right, actions centered below ── */
+    header { position: relative; z-index: 1; padding: 48px 0 26px; }
+    .hero-grid {
+      display: grid; grid-template-columns: 0.92fr 1.08fr;
+      gap: 52px; align-items: center;
+    }
+    .hero-copy { text-align: left; }
+    .beta-pill {
+      display: inline-block; padding: 6px 16px; border-radius: 999px;
+      border: 1px solid var(--chip-border); color: #9ba0cc;
+      background: var(--glass);
+      font-size: 11.5px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+    h1 { font-size: clamp(38px, 4.5vw, 62px); }
+    h1 .accent { color: var(--accent); }
+    .sub {
+      max-width: 460px; margin: 20px 0 0; color: var(--text-secondary);
+      font-size: clamp(16px, 1.5vw, 18px); font-weight: 400;
+    }
+    .product-showcase { position: relative; }
+    .clean-spotlight {
+      position: relative; width: 100%; aspect-ratio: 1477 / 972;
+      overflow: hidden; border: 1px solid var(--border);
+      border-radius: 18px; background: var(--bg-card);
+      box-shadow: 0 30px 100px -34px rgba(0, 0, 0, 0.85), 0 0 90px -30px var(--glow-1);
+      isolation: isolate;
+    }
+    .clean-spotlight img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; opacity: 0; transform: scale(1.015);
+      transition: opacity 900ms ease, transform 1600ms ease;
+    }
+    .clean-spotlight img.spotlight-cover-art { object-position: 68% center; }
+    /* 16:9 shots lose 7.3% per side to the 1477/972 frame; this one carries its
+       album art and title hard against the left edge, so shift the crop window. */
+    .clean-spotlight img.spotlight-art-lyric { object-position: 12% center; }
+    .clean-spotlight img.is-active { opacity: 1; transform: scale(1); }
+
+    .hero-actions { text-align: center; margin-top: 46px; }
+    .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .dl-more {
+      display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+      gap: 9px; margin-top: 18px; font-size: 12.5px;
+    }
+    .dl-mini {
+      display: inline-block; padding: 6px 14px; border-radius: 999px;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      color: var(--text); font-size: 12.5px; font-weight: 800;
+      transition: transform 0.12s ease, filter 0.15s ease;
+    }
+    .dl-mini:hover { text-decoration: none; transform: translateY(-1px); filter: brightness(1.3); color: var(--text-strong); }
+    .dl-notes { margin-top: 13px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .dl-all-link { color: var(--text-faint); font-size: 12.5px; text-decoration: underline; text-underline-offset: 2px; }
+    .dl-all-link:hover { color: var(--text-strong); }
+    .cta-note { margin: 0; color: var(--text-faint); font-size: 13px; }
+
+    /* ── Glass panels around the feature rows (Discord-style bubbles) ── */
+    .sec { position: relative; z-index: 1; padding: 34px 0; }
+    .panel {
+      position: relative; overflow: hidden;
+      border-radius: 34px; padding: 54px 58px;
+      background: var(--glass);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border: 1px solid var(--glass-border);
+    }
+    .panel::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at var(--px, 82%) var(--py, 12%), var(--ptint, rgba(34, 211, 161, 0.16)), transparent 56%);
+    }
+    .panel--mint { --ptint: rgba(34, 211, 161, 0.16); --px: 82%; --py: 12%; }
+    .panel--violet { --ptint: rgba(143, 102, 255, 0.2); --px: 12%; --py: 88%; }
+    .panel--rose { --ptint: rgba(233, 96, 175, 0.16); --px: 86%; --py: 84%; }
+    .frow { position: relative; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 52px; align-items: center; }
+    .frow.rev .fmedia { order: 2; }
+    .frow h2 { font-size: clamp(24px, 2.8vw, 36px); margin-bottom: 14px; text-align: left; }
+    .frow p { font-size: clamp(15px, 1.4vw, 17px); color: var(--text-secondary); max-width: 440px; }
+    .fmedia { position: relative; }
+    /* Outline instead of border: the border used to join the border-box
+       aspect-ratio math and slightly squash the images. */
+    .fmedia img {
+      border-radius: 16px; outline: 1px solid var(--border); outline-offset: -1px;
+      box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+    }
+    .fmedia--eq img { width: 100%; }
+    .fmedia--effects,
+    .fmedia--sleep,
+    .fmedia--compact { display: grid; justify-items: center; align-items: start; }
+    .fmedia--effects img,
+    .fmedia--sleep img { width: 100%; }
+    .fmedia--compact img { width: 100%; border-radius: 12px; }
+    .fmedia--shrunk { display: grid; justify-items: center; align-items: start; }
+    .fmedia--shrunk img { width: auto; max-height: 440px; border-radius: 18px; }
+
+    /* ── Languages (existing deck animation, new skin) ── */
+    .languages { position: relative; z-index: 1; padding: 64px 0; text-align: center; overflow: hidden; }
+    .languages h2 { font-size: clamp(28px, 3.4vw, 46px); margin-bottom: 34px; }
+    .language-stack {
+      position: relative; width: min(100%, 820px);
+      height: clamp(300px, 36vw, 460px); overflow: visible;
+      margin: 0 auto;
+    }
+    .language-stack img {
+      position: absolute; left: 50%; top: 0;
+      width: calc(100% - 96px); height: calc(100% - 76px);
+      object-fit: cover; border-radius: 18px; border: 1px solid var(--border);
+      box-shadow: 0 30px 70px -38px rgba(0, 0, 0, 0.95);
+      z-index: 1; opacity: 0;
+      transform: translate(calc(-50% + 72px), 54px) scale(0.94);
+      transform-origin: 50% 50%;
+      transition: opacity 1100ms ease, transform 1300ms cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: opacity, transform;
+    }
+    .language-stack img.is-active { z-index: 5; opacity: 1; transform: translate(-50%, 0) scale(1); }
+    .language-stack img.is-next { z-index: 4; opacity: 0.48; transform: translate(calc(-50% + 34px), 26px) scale(0.975); }
+    .language-stack img.is-after { z-index: 3; opacity: 0.3; transform: translate(calc(-50% + 68px), 52px) scale(0.95); }
+    .language-stack img.is-back { z-index: 2; opacity: 0.18; transform: translate(calc(-50% + 102px), 78px) scale(0.925); }
+    .language-stack img.is-leaving { z-index: 6; opacity: 0; transform: translate(calc(-50% - 16px), -10px) scale(1.01); }
+    .language-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 30px; }
+    .language-list button {
+      background: var(--glass); border: 1px solid var(--chip-border); border-radius: 999px;
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      padding: 8px 17px; color: var(--text); font-family: var(--font-sans);
+      font-size: 13.5px; font-weight: 700; white-space: nowrap; cursor: pointer;
+      transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+    .language-list button:hover { color: var(--text-strong); border-color: var(--accent); }
+    .language-list button.is-active { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+
+    /* ── Sections (features / pricing / faq) ── */
+    section { position: relative; z-index: 1; }
+    .sec-head h2 { font-size: clamp(28px, 3.4vw, 46px); text-align: center; }
+    .section-sub { text-align: center; color: var(--text-muted); margin: 12px auto 44px; max-width: 560px; font-size: 15.5px; }
+
+    /* ── Feature cards (translucent + blurred) ── */
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--glass); border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border-radius: 18px; padding: 24px;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .card:hover { transform: translateY(-3px); border-color: var(--border); }
+    .card h3 { font-size: 15.5px; font-weight: 800; color: var(--text-strong); margin-bottom: 7px; display: flex; align-items: center; gap: 9px; }
+    .card p { color: var(--text-muted); font-size: 13.5px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+    /* ── Pricing ── */
+    .tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; max-width: 860px; margin: 0 auto; text-align: left; }
+    @media (max-width: 680px) { .tiers { grid-template-columns: 1fr; } }
+    .tier {
+      background: var(--glass); border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border-radius: 24px; padding: 32px;
+    }
+    .tier--premium { border: 2px solid var(--accent); position: relative; scroll-margin-top: 26px; }
+    .tier h3 { font-family: var(--font-display); text-transform: uppercase; font-size: 17px; color: var(--text-strong); }
+    .tier .price { font-size: 32px; font-weight: 800; color: var(--text-strong); margin: 8px 0 2px; }
+    .tier .price small { font-size: 13.5px; font-weight: 700; color: var(--text-muted); }
+    .tier .plan-note { color: var(--text-muted); font-size: 12.5px; margin-bottom: 18px; }
+    .tier ul { list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: var(--text-secondary); }
+    .tier li { display: flex; gap: 10px; align-items: baseline; }
+    .tick { color: var(--accent); font-weight: 800; flex-shrink: 0; }
+    .tier .btn { width: 100%; justify-content: center; margin-top: 24px; font-size: 15px; padding: 13px 0; }
+    .premium-badge {
+      position: absolute; top: -13px; right: 22px; background: var(--accent); color: var(--on-accent);
+      font-size: 11.5px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 4px 13px; border-radius: 999px;
+    }
+
+    /* ── Support ── */
+    .support-block {
+      max-width: 860px; margin: 0 auto;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border-radius: 24px; padding: 34px 38px;
+      display: flex; align-items: center; justify-content: space-between; gap: 28px;
+      position: relative; overflow: hidden;
+    }
+    .support-block::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at 88% 20%, rgba(34, 211, 161, 0.14), transparent 55%);
+    }
+    .support-copy { max-width: 540px; position: relative; }
+    .support-copy h2 { font-size: clamp(22px, 2.4vw, 30px); text-align: left; }
+    .support-copy p { margin-top: 10px; color: var(--text-secondary); font-size: 15px; }
+    .support-block .btn { position: relative; }
+    @media (max-width: 680px) { .support-block { align-items: flex-start; flex-direction: column; } }
+
+    /* ── FAQ (smooth accordion: grid-rows height animation + icon spin) ── */
+    .faq { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .faq-item {
+      background: var(--glass); border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border-radius: 16px; overflow: hidden;
+      transition: border-color 0.3s ease;
+    }
+    .faq-item.open { border-color: rgba(34, 211, 161, 0.42); }
+    .faq-q {
+      width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      padding: 18px 22px; background: transparent; border: 0; cursor: pointer;
+      color: var(--text-strong); font-family: var(--font-sans);
+      font-weight: 800; font-size: 15px; text-align: left; line-height: 1.45;
+    }
+    .faq-plus {
+      width: 18px; height: 18px; flex-shrink: 0;
+      fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round;
+      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .faq-item.open .faq-plus { transform: rotate(135deg); }
+    .faq-a { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+    .faq-item.open .faq-a { grid-template-rows: 1fr; }
+    .faq-a-inner { min-height: 0; overflow: hidden; }
+    .faq-a-inner p {
+      color: var(--text-secondary); font-size: 14px; padding: 0 22px 18px; margin: 0;
+      opacity: 0; transform: translateY(-6px);
+      transition: opacity 0.3s ease 0.08s, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.05s;
+    }
+    .faq-item.open .faq-a-inner p { opacity: 1; transform: none; }
+
+    /* Fallback when backdrop-filter is unsupported */
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .panel, .card, .tier, .faq-item, .support-block, .menu, .lang-menu, .dl-mini, .language-list button { background: #141737; }
+    }
+
+    /* ── End CTA ── */
+    .endcta { position: relative; z-index: 1; text-align: center; padding: 96px 0 100px; overflow: hidden; }
+    .endcta h2 { font-size: clamp(30px, 4vw, 54px); max-width: 840px; margin: 0 auto 34px; }
+
+    /* ── Footer (gradient, language, social, giant wordmark) ── */
+    footer {
+      position: relative; z-index: 1;
+      background: linear-gradient(180deg, #0b0d26 0%, #101538 42%, #0e352c 100%);
+      border-top: 1px solid var(--border-soft);
+      padding: 64px 0 52px;
+      color: var(--text-muted); font-size: 13px;
+    }
+    .fgrid { display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr; gap: 32px; }
+    @media (max-width: 760px) { .fgrid { grid-template-columns: 1fr 1fr; } }
+    .brand-mark--big { height: 30px; gap: 4px; }
+    .brand-mark--big span { width: 5px; border-radius: 3px; }
+    .brand-mark--big span:nth-child(1) { height: 14px; }
+    .brand-mark--big span:nth-child(2) { height: 28px; }
+    .brand-mark--big span:nth-child(3) { height: 19px; }
+    .brand-mark--big span:nth-child(4) { height: 30px; }
+    .brand-mark--big span:nth-child(5) { height: 12px; }
+    .flabel { margin: 26px 0 10px; color: var(--text-muted); font-weight: 800; font-size: 13px; }
+    .lang-select { position: relative; max-width: 250px; }
+    .lang-btn {
+      width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      background: rgba(29, 32, 68, 0.55); border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 16px; color: var(--text-strong);
+      font-family: var(--font-sans); font-size: 14px; font-weight: 700; cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .lang-btn:hover { border-color: var(--chip-border); }
+    .lang-btn .chev { width: 15px; height: 15px; }
+    .lang-select.open .lang-btn .chev { transform: rotate(180deg); }
+    .lang-menu {
+      position: absolute; bottom: calc(100% + 8px); left: 0; right: 0;
+      background: var(--glass-strong);
+      backdrop-filter: var(--blur-glass); -webkit-backdrop-filter: var(--blur-glass);
+      border: 1px solid var(--glass-border); border-radius: 14px;
+      padding: 8px; display: none; z-index: 30;
+      max-height: 250px; overflow: auto;
+    }
+    .lang-select.open .lang-menu { display: block; }
+    .lang-menu button {
+      width: 100%; text-align: left; background: transparent; border: 0;
+      color: var(--text-strong); font-family: var(--font-sans); font-weight: 700; font-size: 13.5px;
+      padding: 9px 12px; border-radius: 10px; cursor: pointer;
+    }
+    .lang-menu button:hover { background: rgba(34, 211, 161, 0.14); }
+    .lang-menu button.is-active { background: var(--accent); color: var(--on-accent); }
+    .social { display: flex; gap: 10px; flex-wrap: wrap; }
+    /* Higher specificity than ".fgrid a" (which sets display:block + margins
+       for the link columns) so the icon tiles keep their flex centering. */
+    .fgrid .social a {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0; padding: 0;
+      color: var(--text-strong); background: rgba(29, 32, 68, 0.55); border: 1px solid var(--border);
+      transition: transform 0.12s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .fgrid .social a:hover { transform: translateY(-2px); color: var(--accent); border-color: var(--chip-border); text-decoration: none; }
+    .social svg { width: 19px; height: 19px; display: block; }
+    .fgrid h4 { color: var(--accent); font-size: 13.5px; font-weight: 800; margin-bottom: 13px; }
+    .fgrid a { display: block; color: var(--text); font-size: 13.5px; margin-bottom: 9px; }
+    .legal { margin-top: 44px; padding-top: 22px; border-top: 1px solid rgba(133, 145, 235, 0.14); text-align: center; }
+    .legal .legal-links { margin-top: 8px; font-size: 13px; }
+    .legal .legal-links a { color: var(--text-muted); font-weight: 700; margin: 0 10px; }
+    .legal .legal-links a:hover { color: var(--accent); }
+    .legal .fine { margin: 12px auto 0; font-size: 12px; color: var(--text-faint); max-width: 640px; line-height: 1.5; }
+    /* Safety strip for browsers that ignore overscroll-behavior (rubber-band
+       overscroll would otherwise flash the fixed background below the page).
+       Painted as box-shadow: pure ink, adds zero scrollable height (an
+       absolutely positioned strip would re-create the very gap it guards). */
+    footer { box-shadow: 0 220px 0 0 #0e352c; }
+
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 34px; }
+      .hero-copy { text-align: center; }
+      .sub { margin: 20px auto 0; }
+      .panel { padding: 30px 24px; border-radius: 26px; }
+      .frow, .frow.rev { grid-template-columns: 1fr; gap: 28px; }
+      .frow.rev .fmedia { order: 0; }
+      .frow h2 { text-align: center; }
+      .frow p { text-align: center; margin: 0 auto; }
+      .sec { padding: 22px 0; }
+      .languages { padding: 48px 0; }
+      .language-stack { height: 420px; }
+      .language-stack img { width: calc(100% - 72px); height: calc(100% - 62px); }
+      nav .links { font-size: 13px; }
+    }
+    @media (max-width: 560px) {
+      .language-stack { height: 300px; }
+      .language-stack img { width: calc(100% - 42px); height: calc(100% - 44px); }
+      .language-stack img.is-next { transform: translate(calc(-50% + 16px), 14px) scale(0.965); }
+      .language-stack img.is-after { transform: translate(calc(-50% + 32px), 28px) scale(0.93); }
+      .language-stack img.is-back { transform: translate(calc(-50% + 48px), 42px) scale(0.895); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .clean-spotlight img { transition: none; transform: none; }
+      .language-stack img { transition: none; }
+      .language-stack img.is-active { transform: translate(-50%, 0) scale(1); }
+      .faq-a, .faq-a-inner p, .faq-plus, .faq-item { transition: none; }
+    }
+
+  </style>
+  <link rel="stylesheet" href="site-deep-air.css" />
+  <script src="site-wave.js" defer></script>
+  <link rel="icon" type="image/webp" href="brand-icon.webp" />
+</head>
+<body>
+  <div class="site-background" aria-hidden="true"></div>
+
+  <div class="wrap">
+    <nav>
+      <!-- Brand lockup rendered by site-brand.js (the ONE canonical mark +
+           wordmark, aligned in one place). -->
+      <a data-brand href="./" aria-label="lunaha home"></a>
+      <span class="links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Free &amp; Premium</a>
+        <a href="#support">Donate</a>
+        <a href="#faq">FAQ</a>
+        <span class="nav-item">
+          <a id="nav-ideas" href="#" rel="noopener">Ideas<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></a>
+          <span class="menu">
+            <span class="menu-label">Categories</span>
+            <a id="nav-cat-ideas" href="#" rel="noopener">Ideas &amp; feedback</a>
+            <a id="nav-cat-announcements" href="#" rel="noopener">Announcements</a>
+            <a id="nav-cat-general" href="#" rel="noopener">General</a>
+            <a id="nav-cat-qa" href="#" rel="noopener">Q&amp;A</a>
+          </span>
+        </span>
+        <span class="nav-item">
+          <a id="nav-github" href="#" rel="noopener">GitHub<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></a>
+          <span class="menu">
+            <span class="menu-label">Project</span>
+            <a id="nav-gh-repo" href="#" rel="noopener">Repository</a>
+            <a id="nav-gh-releases" href="#" rel="noopener">Releases</a>
+            <a id="nav-gh-discussions" href="#" rel="noopener">Discussions</a>
+          </span>
+        </span>
+      </span>
+    </nav>
+
+    <header>
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <span class="beta-pill">Public beta · Windows 10/11 · x64 &amp; ARM64</span>
+          <h1 class="d">Your music.<br /><span class="accent">Your machine.</span></h1>
+          <p class="sub">
+            A fast, beautiful music player for Windows. Your local library, no ads. Listen without an account; sign in for Premium and optional online features.
+          </p>
+        </div>
+        <div class="product-showcase" aria-label="lunaha screenshots">
+          <div class="clean-spotlight" data-clean-spotlight>
+            <img class="is-active" src="Img Player Screenshot.webp" width="1450" height="963" alt="lunaha library view" />
+            <img class="spotlight-cover-art" src="Img - Cover.webp" width="1672" height="941" alt="lunaha cover artwork" />
+            <img src="Img Jump To track.webp" width="1450" height="963" alt="lunaha jump to track" />
+            <img src="Img Player - Vinyl Puls - Visualisation.webp" width="1920" height="1080" alt="lunaha vinyl pulse visualiser" />
+            <img class="spotlight-art-lyric" src="Img Player - Album Art Lyric - Visualisation.webp" width="1920" height="1080" alt="lunaha album art visualiser with lyrics" />
+            <img src="Img Player - Vinyl Puls Lyric- Visualisation.webp" width="1920" height="1080" alt="lunaha vinyl pulse visualiser with lyrics" />
+            <img src="Img Player - Album Art - Visualisation.webp" width="1920" height="1080" alt="lunaha album art visualiser" />
+          </div>
+        </div>
+      </div>
+      <div class="hero-actions" id="download">
+        <p class="download-transition" data-download-transition></p>
+        <div class="cta-row">
+          <a id="dl-x64" class="btn btn-primary" data-glow data-dl="x64" href="#" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5 10 4.6V11H3V5.5ZM3 12.9H10V19.3L3 18.4V12.9ZM11.2 4.4 21 3V11H11.2V4.4ZM11.2 12.9H21V21L11.2 19.5V12.9Z"/></svg><span>Download for Windows</span></a>
+          <a class="btn btn-ghost" href="#pricing">See Free &amp; Premium</a>
+        </div>
+        <div class="dl-more">
+          <a id="dl-arm64" class="dl-mini" data-dl="arm64" href="#" rel="noopener" title="Installer for Snapdragon / ARM laptops.">ARM64 installer</a>
+          <a id="dl-portable-x64" class="dl-mini" data-dl="portable-x64" href="#" rel="noopener" title="Unzip and play, no install.">Portable x64</a>
+          <a id="dl-portable-arm64" class="dl-mini" data-dl="portable-arm64" href="#" rel="noopener" title="Portable zip for ARM laptops.">Portable ARM64</a>
+        </div>
+        <div class="dl-notes">
+          <a id="dl-all" class="dl-all-link" data-dl="releases" href="#" rel="noopener">All versions and release notes on GitHub</a>
+          <p class="cta-note">Free forever. Premium features unlock with a one-time license.</p>
+        </div>
+      </div>
+    </header>
+  </div>
+
+  <div class="sec">
+    <div class="wrap">
+      <div class="panel panel--mint">
+        <article class="frow">
+          <div class="fmedia fmedia--eq">
+            <img src="Img Equalizer.webp" width="758" height="371" alt="lunaha equalizer settings" />
+          </div>
+          <div>
+            <h2 class="d">Tune the sound</h2>
+            <p>Shape playback with the equalizer and keep the sound exactly where you want it.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="wrap">
+      <div class="panel panel--violet">
+        <article class="frow rev">
+          <div class="fmedia fmedia--effects">
+            <img src="Img Effects.webp" width="769" height="148" alt="lunaha spatial audio, stereo width and balance effects" />
+          </div>
+          <div>
+            <h2 class="d">Shape the space</h2>
+            <p>Add spatial depth and stereo width, then balance the sound around you.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="wrap">
+      <div class="panel panel--rose">
+        <article class="frow">
+          <div class="fmedia fmedia--sleep">
+            <img src="Img Sleep Timer.webp" width="758" height="239" alt="lunaha sleep timer" />
+          </div>
+          <div>
+            <h2 class="d">Sleep timer</h2>
+            <p>Let lunaha stop on its own when the night winds down.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="wrap">
+      <div class="panel panel--mint">
+        <article class="frow rev">
+          <div class="fmedia fmedia--compact">
+            <img src="Img Compact Player.webp" width="628" height="56" alt="lunaha compact player" />
+          </div>
+          <div>
+            <h2 class="d">Small when your work needs the screen</h2>
+            <p>Keep playback close while games, creative tools or the desktop stay in front.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="wrap">
+      <div class="panel panel--violet" style="--px: 14%; --py: 16%;">
+        <article class="frow">
+          <div class="fmedia fmedia--shrunk">
+            <img src="Img Super Shrunk Player.webp" width="475" height="963" alt="lunaha super shrunk player" />
+          </div>
+          <div>
+            <h2 class="d">Super shrunk</h2>
+            <p>A minimal shape for moments when the music should stay present, not visible.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+
+  <section class="languages">
+    <div class="wrap">
+      <h2 class="d">Available in 7 languages</h2>
+      <div class="language-stack" data-language-deck aria-hidden="true">
+        <img class="is-active" src="Lang English.webp" width="1520" height="995" alt="" />
+        <img class="is-next" src="Lang Bulgarian.webp" width="1520" height="995" alt="" />
+        <img class="is-after" src="Lang Deutsch.webp" width="1520" height="995" alt="" />
+        <img class="is-back" src="Lang Español.webp" width="1520" height="995" alt="" />
+        <img src="Lang Français.webp" width="1520" height="995" alt="" />
+        <img src="Lang Русский.webp" width="1520" height="995" alt="" />
+        <img src="Lang 中文.webp" width="1520" height="995" alt="" />
+      </div>
+      <div class="language-list" aria-label="Supported languages">
+        <button type="button" class="is-active" data-language-chip="0" aria-label="Show English screenshot">English</button>
+        <button type="button" data-language-chip="1" aria-label="Show Bulgarian screenshot">Bulgarian</button>
+        <button type="button" data-language-chip="2" aria-label="Show Deutsch screenshot">Deutsch</button>
+        <button type="button" data-language-chip="3" aria-label="Show Español screenshot">Español</button>
+        <button type="button" data-language-chip="4" aria-label="Show Français screenshot">Français</button>
+        <button type="button" data-language-chip="5" aria-label="Show Russian screenshot">Русский</button>
+        <button type="button" data-language-chip="6" aria-label="Show Chinese screenshot">中文</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="sec">
+    <div class="wrap">
+      <div class="sec-head"><h2 class="d">Built for people who keep their music</h2></div>
+      <p class="section-sub">Everything is designed around a local library: folders in, music out, zero friction in between.</p>
+      <div class="grid">
+        <div class="card"><h3><span class="dot"></span>Instant library</h3><p>Drop folders in and play. Built for real local libraries, smooth even with thousands of tracks.</p></div>
+        <div class="card"><h3><span class="dot"></span>Gapless &amp; crossfade</h3><p>Tracks preload before they're needed and can blend into each other, even on repeat-one.</p></div>
+        <div class="card"><h3><span class="dot"></span>Synced lyrics</h3><p>Time-synced lyrics from your files, inline or fullscreen, without covering your controls.</p></div>
+        <div class="card"><h3><span class="dot"></span>Mini player</h3><p>A slim always-on-top ribbon with a live equalizer readout, scrolling title and edge snapping.</p></div>
+        <div class="card"><h3><span class="dot"></span>Touch-friendly</h3><p>Big targets, swipe selection and drag reordering that feel right on a Surface or any touch screen.</p></div>
+        <div class="card"><h3><span class="dot"></span>Private by design</h3><p>Your music library and listening history stay on your computer. Sign-in, purchases and optional online features connect to our services. You can turn off anonymous usage statistics in Preferences.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" class="sec">
+    <div class="wrap">
+      <div class="sec-head"><h2 class="d">Free &amp; Premium</h2></div>
+      <p class="section-sub">Start with a complete local player. Upgrade when you want deeper control over how you listen and organize.</p>
+      <div class="tiers">
+        <div class="tier">
+          <h3>Free</h3>
+          <div class="price">$0</div>
+          <div class="plan-note">No account · no time limits</div>
+          <ul>
+            <li><span class="tick">✓</span>Local music library with fast search and sorting</li>
+            <li><span class="tick">✓</span>Smooth listening with a 5-band EQ, crossfade and gapless playback</li>
+            <li><span class="tick">✓</span>Mini player, 3D visualizer and synced lyrics</li>
+            <li><span class="tick">✓</span>Performance modes for games, creative work and battery life</li>
+            <li><span class="tick">✓</span>Native x64 and ARM64 builds for Windows 10/11</li>
+            <li><span class="tick">✓</span>Media keys, hotkeys, Discord presence and touch-friendly controls</li>
+            <li><span class="tick">✓</span>Likes, playlists, an unlimited Play Next queue and quick copy from the playlist</li>
+          </ul>
+          <p class="download-transition" data-download-transition></p>
+          <a class="btn btn-ghost" id="dl-free" data-dl="x64" href="#" rel="noopener">Download free</a>
+        </div>
+        <!-- #premium lives on the CARD, not the section: the player's
+             "Get Premium" links open ...#premium and should land on the
+             Premium plan itself (on narrow windows the Free card would
+             otherwise fill the first screen). The nav uses #pricing. -->
+        <div class="tier tier--premium" id="premium">
+          <span class="premium-badge">Premium</span>
+          <h3>lunaha Premium</h3>
+          <!-- Price printed from site-config.js (single source of truth). -->
+          <div class="price"><span data-lunaha-price="usd">$9.99</span> <small>one-time</small></div>
+          <div class="plan-note">One license · up to 3 of your computers · works offline</div>
+          <ul>
+            <li><span class="tick">✓</span>Everything in Free, plus:</li>
+            <li><span class="tick">✓</span>Full 10-band EQ with saved custom presets</li>
+            <li><span class="tick">✓</span>Spatial audio and stereo width effects</li>
+            <li><span class="tick">✓</span>Unlimited Play Next queue</li>
+            <li><span class="tick">✓</span>Never Repeat and Listening Order</li>
+            <li><span class="tick">✓</span>End the night by putting your PC to sleep or shutting it down</li>
+            <li><span class="tick">✓</span>Super-likes and saved likes inside your music files</li>
+            <li><span class="tick">✓</span>Multi-copy for song names and files</li>
+            <li><span class="tick">✓</span>Precise drag-and-drop placement from File Explorer</li>
+          </ul>
+          <a class="btn btn-primary" id="buy-premium" href="#premium" rel="noopener">Checkout</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="support" class="sec">
+    <div class="wrap">
+      <div class="support-block">
+        <div class="support-copy">
+          <h2 class="d">Support Development</h2>
+          <p>lunaha is built independently. Voluntary contributions help cover development time, testing, and release costs. Pay what you want - every bit helps and none of it is required.</p>
+        </div>
+        <a class="btn btn-primary" id="support-action" href="#support">Support lunaha</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="sec">
+    <div class="wrap">
+      <div class="sec-head"><h2 class="d">FAQ</h2></div>
+      <p class="section-sub">Short answers to the things people actually ask.</p>
+      <div class="faq">
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>Windows says “Unknown publisher” / SmartScreen warns me. Is this safe?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>Yes. The beta is simply not code-signed yet (certificates are expensive for a free beta). Click <em>More info → Run anyway</em>. Every download is built from the same source and published only on our GitHub Releases page. A Microsoft Store version (signed by Microsoft) is planned for the stable release.</p>
+          </div></div>
+        </div>
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>Does it need the internet?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>Playback, your library and local lyrics work offline. Sign-in, purchases, updates and other online features need a connection. Activated Premium also works offline.</p>
+          </div></div>
+        </div>
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>Which Windows versions and devices?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>Windows 10 and 11, with native builds for both x64 and ARM64. Snapdragon laptops run lunaha natively, not emulated.</p>
+          </div></div>
+        </div>
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>Is there a portable version?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>Yes. A zip you can unpack anywhere and run, no installation. Perfect for USB sticks and locked-down machines.</p>
+          </div></div>
+        </div>
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>What happens to my data if I uninstall?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>The uninstaller asks. By default your library, likes and settings are kept, so reinstalling later picks everything back up. You can choose to wipe everything instead.</p>
+          </div></div>
+        </div>
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>How does the Premium license work?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>One account, one-time payment, up to 3 of your own computers. Buy with your email, then sign in with that same email in the app - Premium activates by itself, no license key to copy, and after that it works offline. Moving to a new computer is easy: remove one in the app and sign in on the new one.</p>
+          </div></div>
+        </div>
+        <div class="faq-item">
+          <button type="button" class="faq-q" aria-expanded="false">
+            <span>Is Premium a subscription?</span>
+            <svg class="faq-plus" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <div class="faq-a"><div class="faq-a-inner">
+            <p>No. It's a one-time purchase and the license is yours forever. If the price rises as bigger features arrive, licenses already bought simply keep working - buying early only means paying less.</p>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="endcta">
+    <div class="wrap">
+      <p class="download-transition" data-download-transition></p>
+      <h2 class="d">You can't scroll forever. Better go listen.</h2>
+      <a id="dl-cta" class="btn btn-primary" data-glow data-dl="x64" href="#" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5 10 4.6V11H3V5.5ZM3 12.9H10V19.3L3 18.4V12.9ZM11.2 4.4 21 3V11H11.2V4.4ZM11.2 12.9H21V21L11.2 19.5V12.9Z"/></svg><span>Download for Windows</span></a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="fgrid">
+        <div>
+          <a data-brand="mark" href="./" aria-label="lunaha home"></a>
+          <div class="flabel">Language</div>
+          <!-- Site language selector: UI only for now. The site gets
+               translated into the player's 7 locales AFTER the design
+               is approved (en/bg/de/es/fr/ru/zh). -->
+          <div class="lang-select" id="lang-select">
+            <button type="button" class="lang-btn" aria-haspopup="listbox">
+              <span id="lang-current">English</span>
+              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            <div class="lang-menu" role="listbox" aria-label="Site language">
+              <button type="button" class="is-active" data-lang="en">English</button>
+              <button type="button" data-lang="bg">Български</button>
+              <button type="button" data-lang="de">Deutsch</button>
+              <button type="button" data-lang="es">Español</button>
+              <button type="button" data-lang="fr">Français</button>
+              <button type="button" data-lang="ru">Русский</button>
+              <button type="button" data-lang="zh">中文</button>
+            </div>
+          </div>
+          <div class="flabel">Social</div>
+          <div class="social" aria-label="lunaha on social media">
+            <a id="soc-x" href="#" rel="noopener" aria-label="lunaha on X"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.9 1.2h3.7l-8.1 9.3 9.5 12.3h-7.5l-5.8-7.6-6.7 7.6H.2l8.7-9.9L-.2 1.2h7.7l5.3 6.9 6.1-6.9z"/></svg></a>
+            <a id="soc-instagram" href="#" rel="noopener" aria-label="lunaha on Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="2.8" y="2.8" width="18.4" height="18.4" rx="5.2"/><circle cx="12" cy="12" r="4.4"/><circle cx="17.6" cy="6.4" r="1.15" fill="currentColor" stroke="none"/></svg></a>
+            <a id="soc-youtube" href="#" rel="noopener" aria-label="lunaha on YouTube"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.3 31.3 0 0 0 0 12a31.3 31.3 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.3 31.3 0 0 0 24 12a31.3 31.3 0 0 0-.5-5.8zM9.6 15.6V8.4l6.3 3.6z"/></svg></a>
+            <a id="soc-tiktok" href="#" rel="noopener" aria-label="lunaha on TikTok"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.6 5.8a5.7 5.7 0 0 1-3.4-3.6h-3.2v13.5a2.9 2.9 0 1 1-2.9-2.9c.3 0 .6 0 .9.1V9.6a6.3 6.3 0 0 0-.9-.1 6.2 6.2 0 1 0 6.2 6.2V9.3a8.9 8.9 0 0 0 4.6 1.3V7.4a5.7 5.7 0 0 1-1.3-.2z"/></svg></a>
+            <a id="soc-discord" href="#" rel="noopener" aria-label="lunaha on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.6A19.9 19.9 0 0 0 15.4 3l-.6 1.2a15 15 0 0 0-5.6 0L8.6 3a19.9 19.9 0 0 0-4.9 1.6A20.5 20.5 0 0 0 .2 18.4a20 20 0 0 0 6 3l1-1.7a12.9 12.9 0 0 1-2-1l.5-.4a14.3 14.3 0 0 0 12.6 0l.5.4a12.9 12.9 0 0 1-2 1l1 1.7a20 20 0 0 0 6-3A20.5 20.5 0 0 0 20.3 4.6zM8.3 15.3c-1.2 0-2.2-1.1-2.2-2.4S7.1 10.5 8.3 10.5s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm7.4 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z"/></svg></a>
+          </div>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <a id="foot-download" href="#" rel="noopener">Download</a>
+          <a href="#pricing">Free &amp; Premium</a>
+          <a href="#features">Features</a>
+        </div>
+        <div>
+          <h4>Resources</h4>
+          <a href="#support">Donate</a>
+          <a href="#faq">FAQ</a>
+          <a id="foot-ideas" href="#" rel="noopener">Ideas &amp; feedback</a>
+        </div>
+        <div>
+          <h4>Community</h4>
+          <a id="foot-github" href="#" rel="noopener">GitHub</a>
+          <a id="foot-releases" href="#" rel="noopener">Releases</a>
+          <a id="foot-discussions" href="#" rel="noopener">Discussions</a>
+        </div>
+      </div>
+      <div class="legal">
+        <p>© <span id="year"></span> ArtSolver Ltd. &middot; <span class="credit">lunaha is created by Tihomir Nyagolov</span></p>
+        <!-- Legal pages (added 2026-07-07). Labels stay English for now; i18n
+             keys pending wording approval - see .work/Legal/LEGAL-PLAN.md. -->
+        <p class="legal-links"><a href="terms.html">Terms of Service</a><a href="privacy.html">Privacy Policy</a></p>
+        <p class="fine">lunaha is provided as-is, without warranty. The free version is free to use; Premium features need a valid license. Anonymous usage statistics are on by default and can be turned off in Preferences. Your music library and listening history are never sent anywhere - they stay strictly local on your computer.</p>
+        <!-- The FFmpeg / LGPL statement does NOT live here. It was tried as a
+             second .fine paragraph and came out DUPLICATED, because
+             setAll('.legal .fine', 'legal.fine') fills every one of them with
+             the same string - and the landing page is the wrong home for it
+             anyway (his call 2026-08-05). It now lives in the Terms page,
+             section 2, which this footer already links to, and the full
+             component list lives in the app under About > Third-party
+             notices. -->
+
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ── Single place to point the site at the repo ──────────────────────
+    // The DOWNLOAD links are globalized in site-downloads.js (it owns the repo
+    // + the artifact matching and fills every [data-dl] element with the
+    // latest release). Read the repo from there so there is ONE source; fall
+    // back only if that script somehow didn't load.
+    var GH = window.LUNAHA_CONFIG.repository;
+    var PREMIUM_URL = 'https://buy.polar.sh/polar_cl_lkgmJowx2np3ZeKbyIBISpUMdNiSJIH39BFbb0Riuy6';
+    var SUPPORT_URL = 'https://buy.polar.sh/polar_cl_2RegxENvkIFmYygTu5Ymg6BEGmprzqg53GWEw0E5IDY';
+
+    // Social profiles: fill in real URLs when the accounts exist; icons
+    // with an empty URL keep a dead "#" link for now (design preview).
+    var SOCIAL_URLS = {
+      'soc-x': '',
+      'soc-instagram': '',
+      'soc-youtube': '',
+      'soc-tiktok': '',
+      'soc-discord': ''
+    };
+
+    var releasesPage = window.lunahaDownloads.releasesPage;
+    var repoPage = 'https://github.com/' + GH;
+    var releasesAll = repoPage + '/releases';
+    var discussionsPage = repoPage + '/discussions';
+    // Download links (dl-x64/dl-portable-arm64/dl-all/dl-free/dl-cta) are
+    // handled by site-downloads.js via their data-dl attributes - it sets a
+    // releases-page fallback and upgrades to the direct asset URL. Only the
+    // plain "Download"/"Releases" footer/nav links (no data-dl) are wired here.
+    ['foot-releases', 'foot-download'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.href = releasesPage;
+    });
+    document.getElementById('nav-github').href = repoPage;
+    document.getElementById('foot-github').href = repoPage;
+    document.getElementById('nav-gh-repo').href = repoPage;
+    document.getElementById('nav-gh-releases').href = releasesAll;
+    document.getElementById('nav-gh-discussions').href = discussionsPage;
+    document.getElementById('foot-discussions').href = discussionsPage;
+    var ideasPage = discussionsPage + '/categories/ideas';
+    ['nav-ideas', 'foot-ideas', 'nav-cat-ideas'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.href = ideasPage;
+    });
+    document.getElementById('nav-cat-announcements').href = discussionsPage + '/categories/announcements';
+    document.getElementById('nav-cat-general').href = discussionsPage + '/categories/general';
+    document.getElementById('nav-cat-qa').href = discussionsPage + '/categories/q-a';
+    Object.keys(SOCIAL_URLS).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && SOCIAL_URLS[id]) el.href = SOCIAL_URLS[id];
+    });
+    document.getElementById('buy-premium').href = PREMIUM_URL;
+    document.getElementById('support-action').href = SUPPORT_URL;
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // ── Site language selector (footer): UI only until the site is
+    //    translated after the design sign-off. Remembers the choice.
+    (function () {
+      var sel = document.getElementById('lang-select');
+      if (!sel) return;
+      var btn = sel.querySelector('.lang-btn');
+      var label = document.getElementById('lang-current');
+      btn.addEventListener('click', function () { sel.classList.toggle('open'); });
+      sel.querySelectorAll('.lang-menu button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          sel.querySelectorAll('.lang-menu button').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+          label.textContent = b.textContent;
+          sel.classList.remove('open');
+          try { localStorage.setItem('lunaha-site-lang', b.dataset.lang); } catch (e) {}
+        });
+      });
+      document.addEventListener('click', function (e) { if (!sel.contains(e.target)) sel.classList.remove('open'); });
+    })();
+
+    // ── FAQ accordion: smooth grid-rows height animation + spinning icon.
+    document.querySelectorAll('.faq-item').forEach(function (item) {
+      var q = item.querySelector('.faq-q');
+      q.addEventListener('click', function () {
+        var open = item.classList.toggle('open');
+        q.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    });
+
+    document.querySelectorAll('[data-clean-spotlight]').forEach(function (root) {
+      var slides = Array.from(root.querySelectorAll('img'));
+      var active = 0;
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduceMotion || slides.length < 2) return;
+
+      setInterval(function () {
+        slides[active].classList.remove('is-active');
+        active = (active + 1) % slides.length;
+        slides[active].classList.add('is-active');
+      }, 5200);
+    });
+
+    document.querySelectorAll('[data-language-deck]').forEach(function (root) {
+      var cards = Array.from(root.querySelectorAll('img'));
+      var section = root.closest('.languages');
+      var chips = section ? Array.from(section.querySelectorAll('[data-language-chip]')) : [];
+      var active = 0;
+      var leaveTimer = null;
+      var rotateTimer = null;
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function paint(previous) {
+        cards.forEach(function (card) {
+          card.classList.remove('is-active', 'is-next', 'is-after', 'is-back', 'is-leaving');
+        });
+        chips.forEach(function (chip, index) {
+          chip.classList.toggle('is-active', index === active);
+        });
+        if (previous != null && previous !== active) {
+          cards[previous].classList.add('is-leaving');
+          clearTimeout(leaveTimer);
+          leaveTimer = setTimeout(function () {
+            cards[previous].classList.remove('is-leaving');
+          }, 1350);
+        }
+        cards[active].classList.add('is-active');
+        cards[(active + 1) % cards.length].classList.add('is-next');
+        cards[(active + 2) % cards.length].classList.add('is-after');
+        cards[(active + 3) % cards.length].classList.add('is-back');
+      }
+
+      function goTo(next) {
+        if (next === active || next < 0 || next >= cards.length) return;
+        var previous = active;
+        active = next;
+        paint(previous);
+      }
+
+      function startRotation() {
+        if (reduceMotion || cards.length < 2) return;
+        clearInterval(rotateTimer);
+        rotateTimer = setInterval(function () {
+          goTo((active + 1) % cards.length);
+        }, 4400);
+      }
+
+      chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          goTo(Number(chip.dataset.languageChip));
+          startRotation();
+        });
+      });
+
+      paint(null);
+      startRotation();
+    });
+
+    // ── Exact anchor landing ─────────────────────────────────────────────
+    // The player's "Get Premium" link opens the page directly on #premium.
+    // The browser jumps there before the hero screenshot, the web fonts and
+    // the release-button label finish loading; each of them then pushes the
+    // sections down, so narrow windows end up above the pricing table.
+    // Re-align once loading settles, unless the visitor already moved away.
+    var initialHash = location.hash;
+    var visitorMoved = false;
+    ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function (evt) {
+      addEventListener(evt, function () { visitorMoved = true; }, { passive: true, once: true });
+    });
+    function realignAnchor() {
+      if (visitorMoved || !initialHash || location.hash !== initialHash) return;
+      var target = document.getElementById(initialHash.slice(1));
+      if (!target) return;
+      document.documentElement.style.scrollBehavior = 'auto';
+      target.scrollIntoView();
+      document.documentElement.style.scrollBehavior = '';
+    }
+    addEventListener('load', function () { requestAnimationFrame(realignAnchor); });
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { requestAnimationFrame(realignAnchor); });
+    }
+
+    // The download links are resolved by site-downloads.js (single source).
+    // It broadcasts the resolved release; we only use it here to render the
+    // version pill above the hero title (buttons stay simple - user decision
+    // 2026-07-03). Tag v0.86.1-beta renders as "Public beta v0.86.1".
+    window.addEventListener('lunaha:release', function (e) {
+      var tag = e && e.detail && e.detail.tag;
+      if (!tag) return;
+      window.__relTag = tag.replace(/-beta$/, '');
+      if (window.__renderPill) window.__renderPill();
+      // The longer pill text can rewrap on narrow windows and shift layout -
+      // re-align the anchor once it settles.
+      requestAnimationFrame(realignAnchor);
+    });
+  </script>
+  <script>
+    // ── Site i18n: the player's 7 locales (en/bg/de/es/fr/ru/zh).
+    // English is the source copy baked into the HTML; applyLang() swaps the
+    // strings in place. The visitor's choice persists in localStorage and
+    // the first visit follows the browser language.
+    var I18N = {};
+    I18N.en = {
+      'meta.title': 'lunaha - local-first music player for Windows',
+      'meta.desc': "A fast, beautiful music player for Windows. Your local library, no ads. Listen without an account; sign in for Premium and optional online features.",
+      'nav.features': 'Features',
+      'nav.pricing': 'Free &amp; Premium',
+      'nav.donate': 'Donate',
+      'nav.faq': 'FAQ',
+      'nav.ideas': 'Ideas',
+      'nav.download': 'Download',
+      'nav.mlabel.cat': 'Categories',
+      'nav.cat.ideas': 'Ideas &amp; feedback',
+      'nav.cat.ann': 'Announcements',
+      'nav.cat.gen': 'General',
+      'nav.cat.qa': 'Q&amp;A',
+      'nav.mlabel.proj': 'Project',
+      'nav.gh.repo': 'Repository',
+      'nav.gh.rel': 'Releases',
+      'nav.gh.disc': 'Discussions',
+      'hero.beta': 'Public beta',
+      'hero.title': 'Your music.<br /><span class="accent">Your machine.</span>',
+      'hero.sub': "A fast, beautiful music player for Windows. Your local library, no ads. Listen without an account; sign in for Premium and optional online features.",
+      'cta.dl': 'Download for Windows',
+      'cta.pricing': 'See Free &amp; Premium',
+      'dl.arm64': "ARM64 installer",
+      'dl.arm64.t': "Installer for Snapdragon / ARM laptops.",
+      'dl.px64': "Portable x64",
+      'dl.px64.t': 'Unzip and play, no install.',
+      'dl.parm': 'Portable ARM64',
+      'dl.parm.t': 'Portable zip for ARM laptops.',
+      'dl.all': 'All versions and release notes on GitHub',
+      'cta.note': 'Free forever. Premium features unlock with a one-time license.',
+      'f.eq.h': 'Tune the sound',
+      'f.eq.p': 'Shape playback with the equalizer and keep the sound exactly where you want it.',
+      'f.fx.h': 'Shape the space',
+      'f.fx.p': 'Add spatial depth and stereo width, then balance the sound around you.',
+      'f.sl.h': 'Sleep timer',
+      'f.sl.p': 'Let lunaha stop on its own when the night winds down.',
+      'f.cp.h': 'Small when your work needs the screen',
+      'f.cp.p': 'Keep playback close while games, creative tools or the desktop stay in front.',
+      'f.sh.h': 'Super shrunk',
+      'f.sh.p': 'A minimal shape for moments when the music should stay present, not visible.',
+      'langs.h': 'Available in 7 languages',
+      'ft.h': 'Built for people who keep their music',
+      'ft.sub': 'Everything is designed around a local library: folders in, music out, zero friction in between.',
+      'c1.h': 'Instant library',
+      'c1.p': 'Drop folders in and play. Built for real local libraries, smooth even with thousands of tracks.',
+      'c2.h': 'Gapless &amp; crossfade',
+      'c2.p': "Tracks preload before they're needed and can blend into each other, even on repeat-one.",
+      'c3.h': 'Synced lyrics',
+      'c3.p': 'Time-synced lyrics from your files, inline or fullscreen, without covering your controls.',
+      'c4.h': 'Mini player',
+      'c4.p': 'A slim always-on-top ribbon with a live equalizer readout, scrolling title and edge snapping.',
+      'c5.h': 'Touch-friendly',
+      'c5.p': 'Big targets, swipe selection and drag reordering that feel right on a Surface or any touch screen.',
+      'c6.h': 'Private by design',
+      'c6.p': "Your music library and listening history stay on your computer. Sign-in, purchases and optional online features connect to our services. You can turn off anonymous usage statistics in Preferences.",
+      'pr.h': 'Free &amp; Premium',
+      'pr.sub': 'Start with a complete local player. Upgrade when you want deeper control over how you listen and organize.',
+      't1.h': 'Free',
+      't1.note': 'No account · no time limits',
+      't1.i1': 'Local music library with fast search and sorting',
+      't1.i2': 'Smooth listening with a 5-band EQ, crossfade and gapless playback',
+      't1.i3': 'Mini player, 3D visualizer and synced lyrics',
+      't1.i4': 'Performance modes for games, creative work and battery life',
+      't1.i5': 'Native x64 and ARM64 builds for Windows 10/11',
+      't1.i6': 'Media keys, hotkeys, Discord presence and touch-friendly controls',
+      't1.i7': 'Likes, playlists, an unlimited Play Next queue and quick copy from the playlist',
+      't1.btn': 'Download free',
+      't2.badge': 'Premium',
+      't2.once': 'one-time',
+      't2.note': 'One license · up to 3 of your computers · works offline',
+      't2.i1': 'Everything in Free, plus:',
+      't2.i2': 'Full 10-band EQ with saved custom presets',
+      't2.i3': 'Spatial audio and stereo width effects',
+      't2.i4': 'Hi-Fi Exclusive Mode - your music straight to the sound card, untouched',
+      't2.i5': 'Never Repeat and Listening Order',
+      't2.i6': 'End the night by putting your PC to sleep or shutting it down',
+      't2.i7': 'Super-likes and saved likes inside your music files',
+      't2.i8': 'Multi-copy for song names and files',
+      't2.i9': 'Precise drag-and-drop placement from File Explorer',
+      't2.btn': 'Checkout',
+      'sp.h': 'Support Development',
+      'sp.p': 'lunaha is built independently. Voluntary contributions help cover development time, testing, and release costs. Pay what you want - every bit helps and none of it is required.',
+      'sp.btn': 'Support lunaha',
+      'faq.h': 'FAQ',
+      'faq.sub': 'Short answers to the things people actually ask.',
+      'faq.q1': 'Windows says “Unknown publisher” / SmartScreen warns me. Is this safe?',
+      'faq.a1': 'Yes. The beta is simply not code-signed yet (certificates are expensive for a free beta). Click <em>More info → Run anyway</em>. Every download is built from the same source and published only on our GitHub Releases page. A Microsoft Store version (signed by Microsoft) is planned for the stable release.',
+      'faq.q2': 'Does it need the internet?',
+      'faq.a2': "Playback, your library and local lyrics work offline. Sign-in, purchases, updates and other online features need a connection. Activated Premium also works offline.",
+      'faq.q3': 'Which Windows versions and devices?',
+      'faq.a3': 'Windows 10 and 11, with native builds for both x64 and ARM64. Snapdragon laptops run lunaha natively, not emulated.',
+      'faq.q4': 'Is there a portable version?',
+      'faq.a4': 'Yes. A zip you can unpack anywhere and run, no installation. Perfect for USB sticks and locked-down machines.',
+      'faq.q5': 'What happens to my data if I uninstall?',
+      'faq.a5': 'The uninstaller asks. By default your library, likes and settings are kept, so reinstalling later picks everything back up. You can choose to wipe everything instead.',
+      'faq.q6': 'How does the Premium license work?',
+      'faq.a6': "One account, one-time payment, up to 3 of your own computers. Buy with your email, then sign in with that same email in the app - Premium activates by itself, no license key to copy, and after that it works offline. Moving to a new computer is easy: remove one in the app and sign in on the new one.",
+      'faq.q7': 'Is Premium a subscription?',
+      'faq.a7': "No. It's a one-time purchase and the license is yours forever. If the price rises as bigger features arrive, licenses already bought simply keep working - buying early only means paying less.",
+      'end.h': "You can't scroll forever. Better go listen.",
+      'fo.tag': 'A local-first music player for Windows.',
+      'fo.lang': 'Language',
+      'fo.soc': 'Social',
+      'fo.prod': 'Product',
+      'fo.res': 'Resources',
+      'fo.com': 'Community',
+      'fo.dl': 'Download',
+      'legal.terms': 'Terms of Service',
+      'legal.privacy': 'Privacy Policy',
+      'legal.credit': 'lunaha is created by Tihomir Nyagolov',
+      'legal.fine': 'lunaha is provided as-is, without warranty. The free version is free to use; Premium features need a valid license. Anonymous usage statistics are on by default and can be turned off in Preferences. Your music library and listening history are never sent anywhere - they stay strictly local on your computer.'
+    };
+    I18N.bg = {
+      'meta.title': 'lunaha - локален музикален плеър за Windows',
+      'meta.desc': "Бърз и красив музикален плеър за Windows. Твоята локална библиотека, без реклами. Слушай без акаунт; влез за Premium и допълнителните онлайн функции.",
+      'nav.features': 'Функции',
+      'nav.pricing': 'Безплатен и Premium',
+      'nav.donate': 'Дарение',
+      'nav.faq': 'Въпроси',
+      'nav.ideas': 'Идеи',
+      'nav.download': 'Изтегли',
+      'nav.mlabel.cat': 'Категории',
+      'nav.cat.ideas': 'Идеи и предложения',
+      'nav.cat.ann': 'Новини',
+      'nav.cat.gen': 'Общи',
+      'nav.cat.qa': 'Въпроси и отговори',
+      'nav.mlabel.proj': 'Проект',
+      'nav.gh.repo': 'Хранилище',
+      'nav.gh.rel': 'Версии',
+      'nav.gh.disc': 'Дискусии',
+      'hero.beta': 'Публична бета',
+      'hero.title': 'Твоята музика.<br /><span class="accent">Твоята машина.</span>',
+      'hero.sub': "Бърз и красив музикален плеър за Windows. Твоята локална библиотека, без реклами. Слушай без акаунт; влез за Premium и допълнителните онлайн функции.",
+      'cta.dl': 'Изтегли за Windows',
+      'cta.pricing': 'Виж Безплатен и Premium',
+      'dl.arm64': "ARM64 инсталатор",
+      'dl.arm64.t': "Инсталатор за Snapdragon / ARM лаптопи.",
+      'dl.px64': "Portable x64",
+      'dl.px64.t': 'Разархивирай и слушай, без инсталация.',
+      'dl.parm': 'Portable ARM64',
+      'dl.parm.t': 'Portable zip за ARM лаптопи.',
+      'dl.all': 'Всички версии и бележки по изданията в GitHub',
+      'cta.note': 'Безплатен завинаги. Premium функциите се отключват с еднократен лиценз.',
+      'f.eq.h': 'Настрой звука',
+      'f.eq.p': 'Оформи звученето с еквалайзера и дръж звука точно там, където го искаш.',
+      'f.fx.h': 'Оформи пространството',
+      'f.fx.p': 'Добави пространствена дълбочина и стерео ширина, после балансирай звука около себе си.',
+      'f.sl.h': 'Таймер за заспиване',
+      'f.sl.p': 'Остави lunaha да спре сама, когато нощта се уталожи.',
+      'f.cp.h': 'Малък, когато работата иска екрана',
+      'f.cp.p': 'Музиката остава подръка, докато игрите, творческите инструменти или десктопът са отпред.',
+      'f.sh.h': 'Супер смален',
+      'f.sh.p': 'Минимална форма за моментите, в които музиката трябва да присъства, без да се вижда.',
+      'langs.h': 'Наличен на 7 езика',
+      'ft.h': 'Създаден за хора, които пазят музиката си',
+      'ft.sub': 'Всичко е изградено около локалната библиотека: папките влизат, музиката излиза, без никакво триене по пътя.',
+      'c1.h': 'Мигновена библиотека',
+      'c1.p': 'Пусни папките и слушай. Създаден за истински локални библиотеки, плавен дори с хиляди песни.',
+      'c2.h': 'Gapless и crossfade',
+      'c2.p': 'Песните се зареждат предварително и могат да преливат една в друга, дори при повторение на една песен.',
+      'c3.h': 'Синхронизиран текст',
+      'c3.p': 'Текстове с тайминг от твоите файлове, в плеъра или на цял екран, без да закриват контролите.',
+      'c4.h': 'Мини плеър',
+      'c4.p': 'Тънка лента винаги най-отгоре с жив еквалайзер, плъзгащо се заглавие и прилепване към ръбовете.',
+      'c5.h': 'Удобен за докосване',
+      'c5.p': 'Големи бутони, селекция с плъзгане и пренареждане с влачене, които са на място на Surface или всеки тъч екран.',
+      'c6.h': 'Поверителен по дизайн',
+      'c6.p': "Музикалната ти библиотека и историята на слушане остават на компютъра ти. Входът, покупките и допълнителните онлайн функции се свързват с нашите услуги. Можеш да изключиш анонимната статистика от предпочитанията.",
+      'pr.h': 'Безплатен и Premium',
+      'pr.sub': 'Започни с пълноценен локален плеър. Надгради, когато поискаш по-дълбок контрол върху слушането и подредбата.',
+      't1.h': 'Безплатен',
+      't1.note': 'Без акаунт · без времеви лимити',
+      't1.i1': 'Локална музикална библиотека с бързо търсене и сортиране',
+      't1.i2': 'Плавно слушане с 5-лентов EQ, crossfade и gapless',
+      't1.i3': 'Мини плеър, 3D визуализатор и синхронизиран текст',
+      't1.i4': 'Режими на производителност за игри, творческа работа и батерия',
+      't1.i5': 'Нативни x64 и ARM64 билдове за Windows 10/11',
+      't1.i6': 'Медийни клавиши, преки пътища, Discord присъствие и тъч контроли',
+      't1.i7': 'Харесвания, плейлисти, неограничена опашка Пусни следваща и бързо копиране от плейлиста',
+      't1.btn': 'Изтегли безплатно',
+      't2.badge': 'Premium',
+      't2.once': 'еднократно',
+      't2.note': 'Един лиценз · до 3 твои компютъра · работи офлайн',
+      't2.i1': 'Всичко от Безплатен, плюс:',
+      't2.i2': 'Пълен 10-лентов EQ със запазени твои пресети',
+      't2.i3': 'Spatial Audio и ефекти за ширина на стереото',
+      't2.i4': 'Hi-Fi Exclusive режим - музиката ти право към звуковата карта, недокосната',
+      't2.i5': 'Без повтаряне напред и Ред на слушане',
+      't2.i6': 'Завърши нощта - компютърът заспива или се изключва сам',
+      't2.i7': 'Супер харесвания и харесвания, записани в самите файлове',
+      't2.i8': 'Множествено копиране на имена и файлове',
+      't2.i9': 'Прецизно пускане с влачене от File Explorer',
+      't2.btn': 'Купи',
+      'sp.h': 'Подкрепи разработката',
+      'sp.p': 'lunaha се разработва независимо. Доброволните дарения помагат за времето за разработка, тестването и разходите по изданията. Плати колкото искаш - всяка помощ е ценна и нищо не е задължително.',
+      'sp.btn': 'Подкрепи lunaha',
+      'faq.h': 'Въпроси',
+      'faq.sub': 'Кратки отговори на нещата, които хората наистина питат.',
+      'faq.q1': 'Windows казва “Неизвестен издател” / SmartScreen ме предупреждава. Безопасно ли е?',
+      'faq.a1': 'Да. Бетата просто още няма подписан код (сертификатите са скъпи за безплатна бета). Натисни <em>Още информация → Изпълни въпреки това</em>. Всяко сваляне е билднато от един и същ код и се публикува само на нашата GitHub Releases страница. Версия за Microsoft Store (подписана от Microsoft) е планирана за стабилното издание.',
+      'faq.q2': 'Трябва ли му интернет?',
+      'faq.a2': "Възпроизвеждането, библиотеката и локалните текстове на песни работят офлайн. Входът, покупките, обновяванията и останалите онлайн функции изискват връзка. Активираният Premium също работи офлайн.",
+      'faq.q3': 'Кои версии на Windows и устройства?',
+      'faq.a3': 'Windows 10 и 11, с нативни билдове за x64 и ARM64. Snapdragon лаптопите изпълняват lunaha нативно, не под емулация.',
+      'faq.q4': 'Има ли portable версия?',
+      'faq.a4': 'Да. Zip, който разархивираш където искаш и пускаш, без инсталация. Идеален за флашки и заключени машини.',
+      'faq.q5': 'Какво става с данните ми, ако деинсталирам?',
+      'faq.a5': 'Деинсталаторът пита. По подразбиране библиотеката, харесванията и настройките се пазят, така че при повторна инсталация всичко се връща. Можеш да избереш и пълно изтриване.',
+      'faq.q6': 'Как работи Premium лицензът?',
+      'faq.a6': 'Един акаунт, еднократно плащане, до 3 твои компютъра. Купуваш с имейла си, после влизаш със същия имейл в приложението - Premium се активира сам, без ключ за копиране, и след това работи офлайн. Смяната на компютър е лесна: премахни един в приложението и влез на новия.',
+      'faq.q7': 'Premium абонамент ли е?',
+      'faq.a7': 'Не. Еднократна покупка е и лицензът е твой завинаги. Ако цената се вдигне с идването на по-големи функции, вече купените лицензи просто продължават да работят - да купиш рано значи само да платиш по-малко.',
+      'end.h': 'Не можеш да скролваш вечно. Върви да слушаш.',
+      'fo.tag': 'Локален музикален плеър за Windows.',
+      'fo.lang': 'Език',
+      'fo.soc': 'Социални',
+      'fo.prod': 'Продукт',
+      'fo.res': 'Ресурси',
+      'fo.com': 'Общност',
+      'fo.dl': 'Изтегли',
+      'legal.terms': 'Общи условия',
+      'legal.privacy': 'Политика за поверителност',
+      'legal.credit': 'lunaha е създадена от Tihomir Nyagolov',
+      'legal.fine': 'lunaha се предоставя както си е, без гаранция. Безплатната версия е свободна за ползване; Premium функциите изискват валиден лиценз. Анонимните статистики за ползване са включени по подразбиране и могат да се изключат от предпочитанията. Музикалната ти библиотека и историята на слушане никога не се изпращат никъде - остават строго локални на твоя компютър.'
+    };
+    I18N.de = {
+      'meta.title': 'lunaha - Local-First-Musikplayer für Windows',
+      'meta.desc': "Ein schneller, schöner Musikplayer für Windows. Deine lokale Bibliothek, ohne Werbung. Höre ohne Konto; melde dich für Premium und optionale Online-Funktionen an.",
+      'nav.features': 'Funktionen',
+      'nav.pricing': 'Free &amp; Premium',
+      'nav.donate': 'Spenden',
+      'nav.faq': 'FAQ',
+      'nav.ideas': 'Ideen',
+      'nav.download': 'Download',
+      'nav.mlabel.cat': 'Kategorien',
+      'nav.cat.ideas': 'Ideen &amp; Feedback',
+      'nav.cat.ann': 'Ankündigungen',
+      'nav.cat.gen': 'Allgemein',
+      'nav.cat.qa': 'Fragen &amp; Antworten',
+      'nav.mlabel.proj': 'Projekt',
+      'nav.gh.repo': 'Repository',
+      'nav.gh.rel': 'Releases',
+      'nav.gh.disc': 'Diskussionen',
+      'hero.beta': 'Öffentliche Beta',
+      'hero.title': 'Deine Musik.<br /><span class="accent">Deine Maschine.</span>',
+      'hero.sub': "Ein schneller, schöner Musikplayer für Windows. Deine lokale Bibliothek, ohne Werbung. Höre ohne Konto; melde dich für Premium und optionale Online-Funktionen an.",
+      'cta.dl': 'Für Windows herunterladen',
+      'cta.pricing': 'Free &amp; Premium ansehen',
+      'dl.arm64': "ARM64-Installer",
+      'dl.arm64.t': "Installer für Snapdragon-/ARM-Laptops.",
+      'dl.px64': "Portable x64",
+      'dl.px64.t': 'Entpacken und abspielen, keine Installation.',
+      'dl.parm': 'Portable ARM64',
+      'dl.parm.t': 'Portable-Zip für ARM-Laptops.',
+      'dl.all': 'Alle Versionen und Release Notes auf GitHub',
+      'cta.note': 'Für immer kostenlos. Premium-Funktionen schaltet eine einmalige Lizenz frei.',
+      'f.eq.h': 'Stimm den Klang ab',
+      'f.eq.p': 'Forme die Wiedergabe mit dem Equalizer und halte den Klang genau dort, wo du ihn willst.',
+      'f.fx.h': 'Forme den Raum',
+      'f.fx.p': 'Füge räumliche Tiefe und Stereobreite hinzu und balanciere den Klang um dich herum.',
+      'f.sl.h': 'Sleep-Timer',
+      'f.sl.p': 'Lass lunaha von selbst stoppen, wenn die Nacht zur Ruhe kommt.',
+      'f.cp.h': 'Klein, wenn die Arbeit den Bildschirm braucht',
+      'f.cp.p': 'Die Musik bleibt griffbereit, während Spiele, Kreativ-Tools oder der Desktop vorne bleiben.',
+      'f.sh.h': 'Supergeschrumpft',
+      'f.sh.p': 'Eine minimale Form für Momente, in denen die Musik da sein soll, ohne sichtbar zu sein.',
+      'langs.h': 'In 7 Sprachen verfügbar',
+      'ft.h': 'Gebaut für Menschen, die ihre Musik behalten',
+      'ft.sub': 'Alles ist um eine lokale Bibliothek herum gestaltet: Ordner rein, Musik raus, null Reibung dazwischen.',
+      'c1.h': 'Sofortige Bibliothek',
+      'c1.p': 'Ordner hineinziehen und abspielen. Gebaut für echte lokale Bibliotheken, flüssig selbst mit Tausenden Titeln.',
+      'c2.h': 'Gapless &amp; Crossfade',
+      'c2.p': 'Titel werden vorgeladen und können ineinander übergehen, sogar bei Einzelwiederholung.',
+      'c3.h': 'Synchronisierte Lyrics',
+      'c3.p': 'Zeitsynchronisierte Lyrics aus deinen Dateien, inline oder im Vollbild, ohne deine Bedienelemente zu verdecken.',
+      'c4.h': 'Mini-Player',
+      'c4.p': 'Ein schmales Always-on-top-Band mit Live-Equalizer, laufendem Titel und Andocken an Bildschirmkanten.',
+      'c5.h': 'Touch-freundlich',
+      'c5.p': 'Große Ziele, Wischauswahl und Umsortieren per Ziehen - fühlt sich auf einem Surface oder jedem Touchscreen richtig an.',
+      'c6.h': 'Privat by Design',
+      'c6.p': "Deine Musikbibliothek und dein Hörverlauf bleiben auf deinem Computer. Anmeldung, Käufe und optionale Online-Funktionen verbinden sich mit unseren Diensten. Anonyme Nutzungsstatistiken kannst du in den Einstellungen ausschalten.",
+      'pr.h': 'Free &amp; Premium',
+      'pr.sub': 'Starte mit einem vollwertigen lokalen Player. Rüste auf, wenn du tiefere Kontrolle über Hören und Organisieren willst.',
+      't1.h': 'Free',
+      't1.note': 'Kein Konto · keine Zeitlimits',
+      't1.i1': 'Lokale Musikbibliothek mit schneller Suche und Sortierung',
+      't1.i2': 'Sanftes Hören mit 5-Band-EQ, Crossfade und Gapless-Wiedergabe',
+      't1.i3': 'Mini-Player, 3D-Visualizer und synchronisierte Lyrics',
+      't1.i4': 'Leistungsmodi für Spiele, Kreativarbeit und Akku',
+      't1.i5': 'Native x64- und ARM64-Builds für Windows 10/11',
+      't1.i6': 'Medientasten, Hotkeys, Discord-Präsenz und Touch-Bedienung',
+      't1.i7': 'Favoriten, Playlists, eine unbegrenzte Als-Nächstes-Warteschlange und schnelles Kopieren aus der Playlist',
+      't1.btn': 'Kostenlos laden',
+      't2.badge': 'Premium',
+      't2.once': 'einmalig',
+      't2.note': 'Eine Lizenz · bis zu 3 deiner Computer · funktioniert offline',
+      't2.i1': 'Alles aus Free, plus:',
+      't2.i2': 'Voller 10-Band-EQ mit gespeicherten eigenen Presets',
+      't2.i3': 'Spatial Audio und Stereobreite-Effekte',
+      't2.i4': 'Hi-Fi-Exclusive-Modus - deine Musik direkt zur Soundkarte, unverändert',
+      't2.i5': 'Nicht erneut abspielen und Hörreihenfolge',
+      't2.i6': 'Beende die Nacht, indem dein PC in den Ruhezustand geht oder herunterfährt',
+      't2.i7': 'Super-Likes und Likes, gespeichert in deinen Musikdateien',
+      't2.i8': 'Mehrfachkopie für Titelnamen und Dateien',
+      't2.i9': 'Präzises Drag-and-drop-Einfügen aus dem Datei-Explorer',
+      't2.btn': 'Zur Kasse',
+      'sp.h': 'Entwicklung unterstützen',
+      'sp.p': 'lunaha wird unabhängig entwickelt. Freiwillige Beiträge helfen, Entwicklungszeit, Tests und Release-Kosten zu decken. Zahl, was du willst - alles hilft, nichts ist Pflicht.',
+      'sp.btn': 'lunaha unterstützen',
+      'faq.h': 'FAQ',
+      'faq.sub': 'Kurze Antworten auf die Fragen, die wirklich kommen.',
+      'faq.q1': 'Windows meldet “Unbekannter Herausgeber” / SmartScreen warnt. Ist das sicher?',
+      'faq.a1': 'Ja. Die Beta ist schlicht noch nicht code-signiert (Zertifikate sind für eine kostenlose Beta teuer). Klicke <em>Weitere Informationen → Trotzdem ausführen</em>. Jeder Download wird aus derselben Quelle gebaut und nur auf unserer GitHub-Releases-Seite veröffentlicht. Eine Microsoft-Store-Version (von Microsoft signiert) ist für das stabile Release geplant.',
+      'faq.q2': 'Braucht es Internet?',
+      'faq.a2': "Wiedergabe, deine Bibliothek und lokale Liedtexte funktionieren offline. Anmeldung, Käufe, Updates und andere Online-Funktionen benötigen eine Verbindung. Aktiviertes Premium funktioniert auch offline.",
+      'faq.q3': 'Welche Windows-Versionen und Geräte?',
+      'faq.a3': 'Windows 10 und 11, mit nativen Builds für x64 und ARM64. Snapdragon-Laptops führen lunaha nativ aus, nicht emuliert.',
+      'faq.q4': 'Gibt es eine portable Version?',
+      'faq.a4': 'Ja. Ein Zip zum Entpacken und Starten, ohne Installation. Perfekt für USB-Sticks und gesperrte Rechner.',
+      'faq.q5': 'Was passiert mit meinen Daten beim Deinstallieren?',
+      'faq.a5': 'Der Deinstaller fragt. Standardmäßig bleiben Bibliothek, Likes und Einstellungen erhalten, sodass eine spätere Neuinstallation alles wieder aufnimmt. Du kannst stattdessen auch alles löschen lassen.',
+      'faq.q6': 'Wie funktioniert die Premium-Lizenz?',
+      'faq.a6': 'Ein Konto, einmalige Zahlung, bis zu 3 eigene Computer. Kaufe mit deiner E-Mail-Adresse und melde dich in der App mit derselben E-Mail an - Premium aktiviert sich von selbst, ganz ohne Lizenzschlüssel, und funktioniert danach offline. Der Umzug auf einen neuen Computer ist einfach: entferne einen in der App und melde dich auf dem neuen an.',
+      'faq.q7': 'Ist Premium ein Abo?',
+      'faq.a7': 'Nein. Es ist ein Einmalkauf und die Lizenz gehört dir für immer. Steigt der Preis mit größeren Funktionen, laufen bereits gekaufte Lizenzen einfach weiter - früh kaufen heißt nur weniger zahlen.',
+      'end.h': 'Du kannst nicht ewig scrollen. Geh lieber Musik hören.',
+      'fo.tag': 'Ein Local-First-Musikplayer für Windows.',
+      'fo.lang': 'Sprache',
+      'fo.soc': 'Social',
+      'fo.prod': 'Produkt',
+      'fo.res': 'Ressourcen',
+      'fo.com': 'Community',
+      'fo.dl': 'Download',
+      'legal.terms': 'Nutzungsbedingungen',
+      'legal.privacy': 'Datenschutzerklärung',
+      'legal.credit': 'lunaha wurde erstellt von Tihomir Nyagolov',
+      'legal.fine': 'lunaha wird bereitgestellt wie es ist, ohne Gewähr. Die kostenlose Version ist frei nutzbar; Premium-Funktionen brauchen eine gültige Lizenz. Anonyme Nutzungsstatistiken sind standardmäßig aktiv und lassen sich in den Einstellungen abschalten. Deine Musikbibliothek und dein Hörverlauf werden nirgendwohin gesendet - sie bleiben strikt lokal auf deinem Computer.'
+    };
+    I18N.es = {
+      'meta.title': 'lunaha - reproductor de música local para Windows',
+      'meta.desc': "Un reproductor de música rápido y elegante para Windows. Tu biblioteca local, sin anuncios. Escucha sin cuenta; inicia sesión para usar Premium y las funciones opcionales en línea.",
+      'nav.features': 'Funciones',
+      'nav.pricing': 'Free y Premium',
+      'nav.donate': 'Donar',
+      'nav.faq': 'FAQ',
+      'nav.ideas': 'Ideas',
+      'nav.download': 'Descargar',
+      'nav.mlabel.cat': 'Categorías',
+      'nav.cat.ideas': 'Ideas y sugerencias',
+      'nav.cat.ann': 'Anuncios',
+      'nav.cat.gen': 'General',
+      'nav.cat.qa': 'Preguntas y respuestas',
+      'nav.mlabel.proj': 'Proyecto',
+      'nav.gh.repo': 'Repositorio',
+      'nav.gh.rel': 'Versiones',
+      'nav.gh.disc': 'Discusiones',
+      'hero.beta': 'Beta pública',
+      'hero.title': 'Tu música.<br /><span class="accent">Tu máquina.</span>',
+      'hero.sub': "Un reproductor de música rápido y elegante para Windows. Tu biblioteca local, sin anuncios. Escucha sin cuenta; inicia sesión para usar Premium y las funciones opcionales en línea.",
+      'cta.dl': 'Descargar para Windows',
+      'cta.pricing': 'Ver Free y Premium',
+      'dl.arm64': "Instalador ARM64",
+      'dl.arm64.t': "Instalador para portátiles Snapdragon / ARM.",
+      'dl.px64': "Portable x64",
+      'dl.px64.t': 'Descomprime y reproduce, sin instalación.',
+      'dl.parm': 'Portable ARM64',
+      'dl.parm.t': 'Zip portable para portátiles ARM.',
+      'dl.all': 'Todas las versiones y notas en GitHub',
+      'cta.note': 'Gratis para siempre. Las funciones Premium se desbloquean con una licencia de pago único.',
+      'f.eq.h': 'Ajusta el sonido',
+      'f.eq.p': 'Da forma a la reproducción con el ecualizador y mantén el sonido exactamente donde lo quieres.',
+      'f.fx.h': 'Da forma al espacio',
+      'f.fx.p': 'Añade profundidad espacial y amplitud estéreo, y equilibra el sonido a tu alrededor.',
+      'f.sl.h': 'Temporizador',
+      'f.sl.p': 'Deja que lunaha se detenga sola cuando la noche se apaga.',
+      'f.cp.h': 'Pequeño cuando el trabajo necesita la pantalla',
+      'f.cp.p': 'Mantén la música cerca mientras los juegos, las herramientas creativas o el escritorio están delante.',
+      'f.sh.h': 'Súper reducido',
+      'f.sh.p': 'Una forma mínima para los momentos en que la música debe estar presente, no visible.',
+      'langs.h': 'Disponible en 7 idiomas',
+      'ft.h': 'Hecho para quienes conservan su música',
+      'ft.sub': 'Todo gira en torno a una biblioteca local: carpetas dentro, música fuera, cero fricción entre medias.',
+      'c1.h': 'Biblioteca instantánea',
+      'c1.p': 'Arrastra carpetas y reproduce. Hecho para bibliotecas locales reales, fluido incluso con miles de pistas.',
+      'c2.h': 'Gapless y crossfade',
+      'c2.p': 'Las pistas se precargan antes de necesitarse y pueden fundirse entre sí, incluso repitiendo una sola.',
+      'c3.h': 'Letras sincronizadas',
+      'c3.p': 'Letras sincronizadas desde tus archivos, integradas o a pantalla completa, sin tapar tus controles.',
+      'c4.h': 'Mini reproductor',
+      'c4.p': 'Una cinta fina siempre visible con ecualizador en vivo, título deslizante y ajuste a los bordes.',
+      'c5.h': 'Táctil',
+      'c5.p': 'Objetivos grandes, selección deslizando y reordenar arrastrando: se sienten bien en una Surface o cualquier pantalla táctil.',
+      'c6.h': 'Privado por diseño',
+      'c6.p': "Tu biblioteca musical y tu historial de escucha se quedan en tu ordenador. El inicio de sesión, las compras y las funciones opcionales en línea se conectan a nuestros servicios. Puedes desactivar las estadísticas anónimas de uso en Preferencias.",
+      'pr.h': 'Free y Premium',
+      'pr.sub': 'Empieza con un reproductor local completo. Mejora cuando quieras un control más profundo de cómo escuchas y organizas.',
+      't1.h': 'Free',
+      't1.note': 'Sin cuenta · sin límites de tiempo',
+      't1.i1': 'Biblioteca musical local con búsqueda y orden rápidos',
+      't1.i2': 'Escucha fluida con EQ de 5 bandas, crossfade y gapless',
+      't1.i3': 'Mini reproductor, visualizador 3D y letras sincronizadas',
+      't1.i4': 'Modos de rendimiento para juegos, trabajo creativo y batería',
+      't1.i5': 'Builds nativos x64 y ARM64 para Windows 10/11',
+      't1.i6': 'Teclas multimedia, atajos, presencia en Discord y controles táctiles',
+      't1.i7': 'Me gusta, listas, una cola Reproducir a continuación ilimitada y copia rápida desde la lista',
+      't1.btn': 'Descargar gratis',
+      't2.badge': 'Premium',
+      't2.once': 'pago único',
+      't2.note': 'Una licencia · hasta 3 de tus equipos · funciona sin conexión',
+      't2.i1': 'Todo lo de Free, más:',
+      't2.i2': 'EQ completo de 10 bandas con presets propios guardados',
+      't2.i3': 'Spatial Audio y efectos de amplitud estéreo',
+      't2.i4': 'Modo Hi-Fi Exclusive: tu música directa a la tarjeta de sonido, intacta',
+      't2.i5': 'No repetir hacia adelante y Orden de escucha',
+      't2.i6': 'Termina la noche poniendo tu PC a dormir o apagándolo',
+      't2.i7': 'Súper me gusta y me gusta guardados dentro de tus archivos',
+      't2.i8': 'Copia múltiple de nombres y archivos',
+      't2.i9': 'Colocación precisa arrastrando desde el Explorador de archivos',
+      't2.btn': 'Comprar',
+      'sp.h': 'Apoya el desarrollo',
+      'sp.p': 'lunaha se desarrolla de forma independiente. Las aportaciones voluntarias ayudan a cubrir el tiempo de desarrollo, las pruebas y los costes de publicación. Paga lo que quieras - todo suma y nada es obligatorio.',
+      'sp.btn': 'Apoyar a lunaha',
+      'faq.h': 'FAQ',
+      'faq.sub': 'Respuestas cortas a lo que la gente pregunta de verdad.',
+      'faq.q1': 'Windows dice “Editor desconocido” / SmartScreen me avisa. ¿Es seguro?',
+      'faq.a1': 'Sí. La beta simplemente aún no está firmada (los certificados son caros para una beta gratuita). Pulsa <em>Más información → Ejecutar de todas formas</em>. Cada descarga se compila del mismo código y se publica solo en nuestra página de GitHub Releases. Para la versión estable está prevista una versión de Microsoft Store (firmada por Microsoft).',
+      'faq.q2': '¿Necesita internet?',
+      'faq.a2': "La reproducción, tu biblioteca y las letras locales funcionan sin conexión. El inicio de sesión, las compras, las actualizaciones y otras funciones en línea necesitan conexión. Premium también funciona sin conexión una vez activado.",
+      'faq.q3': '¿Qué versiones de Windows y dispositivos?',
+      'faq.a3': 'Windows 10 y 11, con builds nativos para x64 y ARM64. Los portátiles Snapdragon ejecutan lunaha de forma nativa, sin emulación.',
+      'faq.q4': '¿Hay versión portable?',
+      'faq.a4': 'Sí. Un zip que descomprimes donde quieras y ejecutas, sin instalación. Perfecto para memorias USB y equipos restringidos.',
+      'faq.q5': '¿Qué pasa con mis datos si desinstalo?',
+      'faq.a5': 'El desinstalador pregunta. Por defecto tu biblioteca, tus me gusta y tus ajustes se conservan, así que al reinstalar todo vuelve. También puedes elegir borrarlo todo.',
+      'faq.q6': '¿Cómo funciona la licencia Premium?',
+      'faq.a6': 'Una cuenta, un pago único, hasta 3 equipos tuyos. Compra con tu correo y luego inicia sesión en la app con ese mismo correo - Premium se activa solo, sin clave que copiar, y después funciona sin conexión. Cambiar de equipo es fácil: quita uno en la app e inicia sesión en el nuevo.',
+      'faq.q7': '¿Premium es una suscripción?',
+      'faq.a7': 'No. Es una compra única y la licencia es tuya para siempre. Si el precio sube con funciones mayores, las licencias ya compradas siguen funcionando - comprar pronto solo significa pagar menos.',
+      'end.h': 'No puedes hacer scroll para siempre. Mejor ve a escuchar.',
+      'fo.tag': 'Un reproductor de música local para Windows.',
+      'fo.lang': 'Idioma',
+      'fo.soc': 'Redes',
+      'fo.prod': 'Producto',
+      'fo.res': 'Recursos',
+      'fo.com': 'Comunidad',
+      'fo.dl': 'Descargar',
+      'legal.terms': 'Condiciones de servicio',
+      'legal.privacy': 'Política de privacidad',
+      'legal.credit': 'lunaha está creado por Tihomir Nyagolov',
+      'legal.fine': 'lunaha se ofrece tal cual, sin garantía. La versión gratuita es de uso libre; las funciones Premium requieren una licencia válida. Las estadísticas anónimas de uso están activadas por defecto y pueden desactivarse en Preferencias. Tu biblioteca musical y tu historial de escucha nunca se envían a ningún sitio - permanecen estrictamente locales en tu equipo.'
+    };
+    I18N.fr = {
+      'meta.title': 'lunaha - lecteur de musique local pour Windows',
+      'meta.desc': "Un lecteur de musique rapide et élégant pour Windows. Votre bibliothèque locale, sans publicité. Écoutez sans compte ; connectez-vous pour Premium et les fonctions en ligne facultatives.",
+      'nav.features': 'Fonctions',
+      'nav.pricing': 'Free et Premium',
+      'nav.donate': 'Faire un don',
+      'nav.faq': 'FAQ',
+      'nav.ideas': 'Idées',
+      'nav.download': 'Télécharger',
+      'nav.mlabel.cat': 'Catégories',
+      'nav.cat.ideas': 'Idées et retours',
+      'nav.cat.ann': 'Annonces',
+      'nav.cat.gen': 'Général',
+      'nav.cat.qa': 'Questions-réponses',
+      'nav.mlabel.proj': 'Projet',
+      'nav.gh.repo': 'Dépôt',
+      'nav.gh.rel': 'Versions',
+      'nav.gh.disc': 'Discussions',
+      'hero.beta': 'Bêta publique',
+      'hero.title': 'Votre musique.<br /><span class="accent">Votre machine.</span>',
+      'hero.sub': "Un lecteur de musique rapide et élégant pour Windows. Votre bibliothèque locale, sans publicité. Écoutez sans compte ; connectez-vous pour Premium et les fonctions en ligne facultatives.",
+      'cta.dl': 'Télécharger pour Windows',
+      'cta.pricing': 'Voir Free et Premium',
+      'dl.arm64': "Installateur ARM64",
+      'dl.arm64.t': "Installateur pour portables Snapdragon / ARM.",
+      'dl.px64': "Portable x64",
+      'dl.px64.t': 'Décompressez et écoutez, sans installation.',
+      'dl.parm': 'Portable ARM64',
+      'dl.parm.t': 'Zip portable pour portables ARM.',
+      'dl.all': 'Toutes les versions et notes sur GitHub',
+      'cta.note': 'Gratuit pour toujours. Les fonctions Premium se débloquent avec une licence à paiement unique.',
+      'f.eq.h': 'Réglez le son',
+      'f.eq.p': "Façonnez la lecture avec l'égaliseur et gardez le son exactement là où vous le voulez.",
+      'f.fx.h': "Façonnez l'espace",
+      'f.fx.p': 'Ajoutez de la profondeur spatiale et de la largeur stéréo, puis équilibrez le son autour de vous.',
+      'f.sl.h': 'Minuteur de veille',
+      'f.sl.p': "Laissez lunaha s'arrêter d'elle-même quand la nuit s'apaise.",
+      'f.cp.h': "Petit quand le travail a besoin de l'écran",
+      'f.cp.p': 'Gardez la musique à portée pendant que les jeux, les outils créatifs ou le bureau restent devant.',
+      'f.sh.h': 'Super réduit',
+      'f.sh.p': 'Une forme minimale pour les moments où la musique doit être présente, pas visible.',
+      'langs.h': 'Disponible en 7 langues',
+      'ft.h': 'Conçu pour ceux qui gardent leur musique',
+      'ft.sub': "Tout est pensé autour d'une bibliothèque locale : les dossiers entrent, la musique sort, zéro friction entre les deux.",
+      'c1.h': 'Bibliothèque instantanée',
+      'c1.p': 'Déposez vos dossiers et écoutez. Conçu pour de vraies bibliothèques locales, fluide même avec des milliers de titres.',
+      'c2.h': 'Gapless et crossfade',
+      'c2.p': "Les titres se préchargent avant d'être nécessaires et peuvent se fondre l'un dans l'autre, même en répétition d'un seul titre.",
+      'c3.h': 'Paroles synchronisées',
+      'c3.p': 'Paroles synchronisées depuis vos fichiers, intégrées ou en plein écran, sans couvrir vos commandes.',
+      'c4.h': 'Mini-lecteur',
+      'c4.p': 'Un ruban fin toujours au premier plan avec égaliseur en direct, titre défilant et accrochage aux bords.',
+      'c5.h': 'Tactile',
+      'c5.p': 'Grandes cibles, sélection par glissement et réorganisation par glisser-déposer : parfait sur une Surface ou tout écran tactile.',
+      'c6.h': 'Privé par conception',
+      'c6.p': "Votre bibliothèque musicale et votre historique d’écoute restent sur votre ordinateur. La connexion au compte, les achats et les fonctions en ligne facultatives utilisent nos services. Vous pouvez désactiver les statistiques d’utilisation anonymes dans les préférences.",
+      'pr.h': 'Free et Premium',
+      'pr.sub': 'Commencez avec un lecteur local complet. Passez à Premium quand vous voulez un contrôle plus fin de votre écoute et de votre organisation.',
+      't1.h': 'Free',
+      't1.note': 'Pas de compte · pas de limite de temps',
+      't1.i1': 'Bibliothèque musicale locale avec recherche et tri rapides',
+      't1.i2': 'Écoute fluide avec EQ 5 bandes, crossfade et lecture gapless',
+      't1.i3': 'Mini-lecteur, visualiseur 3D et paroles synchronisées',
+      't1.i4': 'Modes performance pour les jeux, la création et la batterie',
+      't1.i5': 'Builds natifs x64 et ARM64 pour Windows 10/11',
+      't1.i6': 'Touches multimédias, raccourcis, présence Discord et commandes tactiles',
+      't1.i7': 'Coups de cœur, playlists, une file Lire ensuite illimitée et copie rapide depuis la playlist',
+      't1.btn': 'Télécharger gratuitement',
+      't2.badge': 'Premium',
+      't2.once': 'paiement unique',
+      't2.note': "Une licence · jusqu'à 3 de vos ordinateurs · fonctionne hors ligne",
+      't2.i1': 'Tout Free, plus :',
+      't2.i2': 'EQ complet 10 bandes avec présets personnels enregistrés',
+      't2.i3': 'Spatial Audio et effets de largeur stéréo',
+      't2.i4': 'Mode Hi-Fi Exclusive - votre musique droit vers la carte son, intacte',
+      't2.i5': "Ne pas répéter en avant et Ordre d'écoute",
+      't2.i6': "Termine la nuit en mettant ton PC en veille ou en l'éteignant",
+      't2.i7': 'Super-likes et likes enregistrés dans vos fichiers musicaux',
+      't2.i8': 'Copie multiple des titres et des fichiers',
+      't2.i9': "Placement précis par glisser-déposer depuis l'Explorateur de fichiers",
+      't2.btn': 'Acheter',
+      'sp.h': 'Soutenir le développement',
+      'sp.p': "lunaha est développé de façon indépendante. Les contributions volontaires aident à couvrir le temps de développement, les tests et les coûts de publication. Payez ce que vous voulez - tout aide et rien n'est obligatoire.",
+      'sp.btn': 'Soutenir lunaha',
+      'faq.h': 'FAQ',
+      'faq.sub': "Des réponses courtes aux questions qu'on pose vraiment.",
+      'faq.q1': "Windows affiche “Éditeur inconnu” / SmartScreen m'avertit. Est-ce sûr ?",
+      'faq.a1': "Oui. La bêta n'est simplement pas encore signée (les certificats coûtent cher pour une bêta gratuite). Cliquez sur <em>Informations complémentaires → Exécuter quand même</em>. Chaque téléchargement est compilé depuis la même source et publié uniquement sur notre page GitHub Releases. Une version Microsoft Store (signée par Microsoft) est prévue pour la version stable.",
+      'faq.q2': "A-t-il besoin d'internet ?",
+      'faq.a2': "La lecture, votre bibliothèque et les paroles locales fonctionnent hors ligne. La connexion au compte, les achats, les mises à jour et les autres fonctions en ligne nécessitent une connexion. Premium fonctionne aussi hors ligne une fois activé.",
+      'faq.q3': 'Quelles versions de Windows et quels appareils ?',
+      'faq.a3': 'Windows 10 et 11, avec des builds natifs x64 et ARM64. Les portables Snapdragon exécutent lunaha nativement, sans émulation.',
+      'faq.q4': 'Existe-t-il une version portable ?',
+      'faq.a4': "Oui. Un zip à décompresser n'importe où et à lancer, sans installation. Parfait pour les clés USB et les machines verrouillées.",
+      'faq.q5': 'Que deviennent mes données si je désinstalle ?',
+      'faq.a5': 'Le désinstalleur demande. Par défaut, votre bibliothèque, vos likes et vos réglages sont conservés : une réinstallation ultérieure retrouve tout. Vous pouvez aussi choisir de tout effacer.',
+      'faq.q6': 'Comment fonctionne la licence Premium ?',
+      'faq.a6': "Un compte, un paiement unique, jusqu'à 3 de vos ordinateurs. Achetez avec votre e-mail, puis connectez-vous dans l'application avec ce même e-mail - Premium s'active tout seul, sans clé à copier, puis fonctionne hors ligne. Changer d'ordinateur est simple : retirez-en un dans l'application et connectez-vous sur le nouveau.",
+      'faq.q7': 'Premium est-il un abonnement ?',
+      'faq.a7': "Non. C'est un achat unique et la licence est à vous pour toujours. Si le prix augmente avec l'arrivée de fonctions majeures, les licences déjà achetées continuent de fonctionner - acheter tôt, c'est juste payer moins.",
+      'end.h': 'Vous ne pouvez pas défiler pour toujours. Allez plutôt écouter.',
+      'fo.tag': 'Un lecteur de musique local pour Windows.',
+      'fo.lang': 'Langue',
+      'fo.soc': 'Réseaux',
+      'fo.prod': 'Produit',
+      'fo.res': 'Ressources',
+      'fo.com': 'Communauté',
+      'fo.dl': 'Télécharger',
+      'legal.terms': "Conditions d'utilisation",
+      'legal.privacy': 'Politique de confidentialité',
+      'legal.credit': 'lunaha est créé par Tihomir Nyagolov',
+      'legal.fine': "lunaha est fourni tel quel, sans garantie. La version gratuite est libre d'utilisation ; les fonctions Premium nécessitent une licence valide. Les statistiques anonymes d'utilisation sont activées par défaut et peuvent être désactivées dans les Préférences. Votre bibliothèque musicale et votre historique d'écoute ne sont jamais envoyés nulle part - ils restent strictement locaux sur votre ordinateur."
+    };
+    I18N.ru = {
+      'meta.title': 'lunaha - локальный музыкальный плеер для Windows',
+      'meta.desc': "Быстрый и красивый музыкальный плеер для Windows. Ваша локальная библиотека, без рекламы. Слушайте без аккаунта; войдите для доступа к Premium и дополнительным онлайн-функциям.",
+      'nav.features': 'Функции',
+      'nav.pricing': 'Free и Premium',
+      'nav.donate': 'Поддержать',
+      'nav.faq': 'Вопросы',
+      'nav.ideas': 'Идеи',
+      'nav.download': 'Скачать',
+      'nav.mlabel.cat': 'Категории',
+      'nav.cat.ideas': 'Идеи и отзывы',
+      'nav.cat.ann': 'Анонсы',
+      'nav.cat.gen': 'Общее',
+      'nav.cat.qa': 'Вопросы и ответы',
+      'nav.mlabel.proj': 'Проект',
+      'nav.gh.repo': 'Репозиторий',
+      'nav.gh.rel': 'Релизы',
+      'nav.gh.disc': 'Обсуждения',
+      'hero.beta': 'Публичная бета',
+      'hero.title': 'Ваша музыка.<br /><span class="accent">Ваша машина.</span>',
+      'hero.sub': "Быстрый и красивый музыкальный плеер для Windows. Ваша локальная библиотека, без рекламы. Слушайте без аккаунта; войдите для доступа к Premium и дополнительным онлайн-функциям.",
+      'cta.dl': 'Скачать для Windows',
+      'cta.pricing': 'Смотреть Free и Premium',
+      'dl.arm64': "Установщик ARM64",
+      'dl.arm64.t': "Установщик для ноутбуков Snapdragon / ARM.",
+      'dl.px64': "Portable x64",
+      'dl.px64.t': 'Распакуйте и слушайте, без установки.',
+      'dl.parm': 'Portable ARM64',
+      'dl.parm.t': 'Portable-zip для ARM-ноутбуков.',
+      'dl.all': 'Все версии и заметки о релизах на GitHub',
+      'cta.note': 'Бесплатно навсегда. Premium-функции открываются разовой лицензией.',
+      'f.eq.h': 'Настройте звук',
+      'f.eq.p': 'Формируйте звучание эквалайзером и держите звук именно там, где хотите.',
+      'f.fx.h': 'Настройте пространство',
+      'f.fx.p': 'Добавьте пространственную глубину и ширину стерео, затем сбалансируйте звук вокруг себя.',
+      'f.sl.h': 'Таймер сна',
+      'f.sl.p': 'Пусть lunaha остановится сама, когда ночь затихает.',
+      'f.cp.h': 'Маленький, когда работе нужен экран',
+      'f.cp.p': 'Музыка остаётся под рукой, пока игры, творческие инструменты или рабочий стол впереди.',
+      'f.sh.h': 'Супер-мини',
+      'f.sh.p': 'Минимальная форма для моментов, когда музыка должна присутствовать, но не быть на виду.',
+      'langs.h': 'Доступен на 7 языках',
+      'ft.h': 'Создан для тех, кто хранит свою музыку',
+      'ft.sub': 'Всё построено вокруг локальной библиотеки: папки внутрь, музыка наружу, ноль трения между ними.',
+      'c1.h': 'Мгновенная библиотека',
+      'c1.p': 'Перетащите папки и слушайте. Создан для настоящих локальных библиотек, плавный даже с тысячами треков.',
+      'c2.h': 'Gapless и кроссфейд',
+      'c2.p': 'Треки подгружаются заранее и могут перетекать друг в друга, даже при повторе одного трека.',
+      'c3.h': 'Синхронный текст',
+      'c3.p': 'Синхронизированный текст из ваших файлов, в плеере или на весь экран, не закрывая управление.',
+      'c4.h': 'Мини-плеер',
+      'c4.p': 'Тонкая лента поверх окон с живым эквалайзером, бегущим заголовком и прилипанием к краям.',
+      'c5.h': 'Удобен для касаний',
+      'c5.p': 'Крупные цели, выделение свайпом и перетаскивание, которые естественны на Surface и любом сенсорном экране.',
+      'c6.h': 'Приватный по замыслу',
+      'c6.p': "Ваша музыкальная библиотека и история прослушивания остаются на вашем компьютере. Вход, покупки и дополнительные онлайн-функции подключаются к нашим сервисам. Анонимную статистику использования можно отключить в настройках.",
+      'pr.h': 'Free и Premium',
+      'pr.sub': 'Начните с полноценного локального плеера. Обновитесь, когда захотите более глубокого контроля над прослушиванием и порядком.',
+      't1.h': 'Free',
+      't1.note': 'Без аккаунта · без ограничений по времени',
+      't1.i1': 'Локальная музыкальная библиотека с быстрым поиском и сортировкой',
+      't1.i2': 'Плавное прослушивание с 5-полосным EQ, кроссфейдом и gapless',
+      't1.i3': 'Мини-плеер, 3D-визуализатор и синхронный текст',
+      't1.i4': 'Режимы производительности для игр, творчества и батареи',
+      't1.i5': 'Нативные сборки x64 и ARM64 для Windows 10/11',
+      't1.i6': 'Медиаклавиши, горячие клавиши, Discord-статус и сенсорное управление',
+      't1.i7': 'Лайки, плейлисты, безлимитная очередь «Играть далее» и быстрое копирование из плейлиста',
+      't1.btn': 'Скачать бесплатно',
+      't2.badge': 'Premium',
+      't2.once': 'разовый платёж',
+      't2.note': 'Одна лицензия · до 3 ваших компьютеров · работает офлайн',
+      't2.i1': 'Всё из Free, плюс:',
+      't2.i2': 'Полный 10-полосный EQ с сохранёнными пресетами',
+      't2.i3': 'Spatial Audio и эффекты ширины стерео',
+      't2.i4': 'Режим Hi-Fi Exclusive - музыка идёт прямо на звуковую карту, без изменений',
+      't2.i5': '«Не повторять вперёд» и Порядок прослушивания',
+      't2.i6': 'Заверши ночь - компьютер уснёт или выключится сам',
+      't2.i7': 'Супер-лайки и лайки, сохранённые в самих файлах',
+      't2.i8': 'Мультикопирование названий и файлов',
+      't2.i9': 'Точное перетаскивание из Проводника',
+      't2.btn': 'Купить',
+      'sp.h': 'Поддержать разработку',
+      'sp.p': 'lunaha разрабатывается независимо. Добровольные взносы помогают покрыть время разработки, тестирование и расходы на релизы. Платите сколько хотите - помогает всё, и ничего не обязательно.',
+      'sp.btn': 'Поддержать lunaha',
+      'faq.h': 'Вопросы',
+      'faq.sub': 'Короткие ответы на то, о чём действительно спрашивают.',
+      'faq.q1': 'Windows пишет “Неизвестный издатель” / SmartScreen предупреждает. Это безопасно?',
+      'faq.a1': 'Да. Бета просто ещё не подписана (сертификаты дороги для бесплатной беты). Нажмите <em>Подробнее → Выполнить в любом случае</em>. Каждая загрузка собрана из одного исходника и публикуется только на нашей странице GitHub Releases. Версия для Microsoft Store (подписанная Microsoft) запланирована к стабильному релизу.',
+      'faq.q2': 'Нужен ли интернет?',
+      'faq.a2': "Воспроизведение, библиотека и локальные тексты песен работают офлайн. Для входа, покупок, обновлений и других онлайн-функций требуется подключение. Активированный Premium также работает офлайн.",
+      'faq.q3': 'Какие версии Windows и устройства?',
+      'faq.a3': 'Windows 10 и 11, с нативными сборками для x64 и ARM64. Ноутбуки на Snapdragon запускают lunaha нативно, без эмуляции.',
+      'faq.q4': 'Есть ли portable-версия?',
+      'faq.a4': 'Да. Zip, который можно распаковать где угодно и запустить без установки. Идеален для флешек и закрытых машин.',
+      'faq.q5': 'Что будет с моими данными при удалении?',
+      'faq.a5': 'Деинсталлятор спросит. По умолчанию библиотека, лайки и настройки сохраняются, и повторная установка всё подхватит. Можно выбрать и полное удаление.',
+      'faq.q6': 'Как работает Premium-лицензия?',
+      'faq.a6': 'Один аккаунт, разовый платёж, до 3 ваших компьютеров. Купите, указав свою почту, затем войдите в приложении с той же почтой - Premium активируется сам, без ключа, и после этого работает офлайн. Переезд на новый компьютер прост: удалите один в приложении и войдите на новом.',
+      'faq.q7': 'Premium - это подписка?',
+      'faq.a7': 'Нет. Это разовая покупка, и лицензия ваша навсегда. Если цена вырастет с приходом больших функций, уже купленные лицензии просто продолжат работать - купить раньше значит заплатить меньше.',
+      'end.h': 'Нельзя скроллить вечно. Идите лучше слушать.',
+      'fo.tag': 'Локальный музыкальный плеер для Windows.',
+      'fo.lang': 'Язык',
+      'fo.soc': 'Соцсети',
+      'fo.prod': 'Продукт',
+      'fo.res': 'Ресурсы',
+      'fo.com': 'Сообщество',
+      'fo.dl': 'Скачать',
+      'legal.terms': 'Условия использования',
+      'legal.privacy': 'Политика конфиденциальности',
+      'legal.credit': 'lunaha создан Tihomir Nyagolov',
+      'legal.fine': 'lunaha предоставляется как есть, без гарантий. Бесплатная версия свободна для использования; Premium-функции требуют действующей лицензии. Анонимная статистика включена по умолчанию и отключается в настройках. Ваша библиотека и история прослушивания никуда не отправляются - они остаются строго локально на вашем компьютере.'
+    };
+    I18N.zh = {
+      'meta.title': 'lunaha - Windows 本地优先音乐播放器',
+      'meta.desc': "快速、美观的 Windows 音乐播放器。本地音乐库，无广告。无需账号即可聆听；登录后可使用 Premium 和可选的在线功能。",
+      'nav.features': '功能',
+      'nav.pricing': '免费与 Premium',
+      'nav.donate': '捐助',
+      'nav.faq': '常见问题',
+      'nav.ideas': '想法',
+      'nav.download': '下载',
+      'nav.mlabel.cat': '分类',
+      'nav.cat.ideas': '想法与反馈',
+      'nav.cat.ann': '公告',
+      'nav.cat.gen': '综合',
+      'nav.cat.qa': '问答',
+      'nav.mlabel.proj': '项目',
+      'nav.gh.repo': '代码仓库',
+      'nav.gh.rel': '版本发布',
+      'nav.gh.disc': '讨论区',
+      'hero.beta': '公开测试版',
+      'hero.title': '你的音乐。<br /><span class="accent">你的机器。</span>',
+      'hero.sub': "快速、美观的 Windows 音乐播放器。本地音乐库，无广告。无需账号即可聆听；登录后可使用 Premium 和可选的在线功能。",
+      'cta.dl': '下载 Windows 版',
+      'cta.pricing': '查看免费与 Premium',
+      'dl.arm64': "ARM64 安装包",
+      'dl.arm64.t': "适用于骁龙 / ARM 笔记本的安装包。",
+      'dl.px64': "便携版 x64",
+      'dl.px64.t': '解压即用，无需安装。',
+      'dl.parm': '便携版 ARM64',
+      'dl.parm.t': '适用于 ARM 笔记本的便携 zip。',
+      'dl.all': 'GitHub 上的全部版本与更新说明',
+      'cta.note': '永久免费。Premium 功能通过一次性许可证解锁。',
+      'f.eq.h': '调校声音',
+      'f.eq.p': '用均衡器塑造播放效果，让声音始终停在你想要的位置。',
+      'f.fx.h': '塑造空间感',
+      'f.fx.p': '添加空间深度和立体声宽度，再平衡环绕你的声音。',
+      'f.sl.h': '睡眠定时器',
+      'f.sl.p': '夜深了，让 lunaha 自己停下来。',
+      'f.cp.h': '工作需要屏幕时，它很小',
+      'f.cp.p': '游戏、创作工具或桌面在前台时，音乐依然近在手边。',
+      'f.sh.h': '超级迷你',
+      'f.sh.p': '极简形态，让音乐保持存在，却不占视线。',
+      'langs.h': '支持 7 种语言',
+      'ft.h': '为珍藏音乐的人而生',
+      'ft.sub': '一切围绕本地音乐库设计：文件夹进，音乐出，中间零阻力。',
+      'c1.h': '即刻建库',
+      'c1.p': '拖入文件夹即可播放。为真实的本地音乐库打造，数千首曲目依然流畅。',
+      'c2.h': '无缝与交叉淡化',
+      'c2.p': '曲目提前预载，可彼此交融，即使单曲循环也不例外。',
+      'c3.h': '同步歌词',
+      'c3.p': '来自你文件的逐句歌词，内嵌或全屏显示，绝不遮挡控件。',
+      'c4.h': '迷你播放器',
+      'c4.p': '纤细的置顶条，带实时均衡器、滚动标题和边缘吸附。',
+      'c5.h': '触控友好',
+      'c5.p': '大按钮、滑动多选、拖拽排序，在 Surface 或任何触屏上都得心应手。',
+      'c6.h': '隐私为本',
+      'c6.p': "你的音乐库和收听历史保留在你的电脑上。登录、购买和可选的在线功能会连接我们的服务。你可以在偏好设置中关闭匿名使用统计。",
+      'pr.h': '免费与 Premium',
+      'pr.sub': '从完整的本地播放器开始。想更深入掌控收听与整理时，再升级。',
+      't1.h': '免费',
+      't1.note': '无账户 · 无时间限制',
+      't1.i1': '本地音乐库，搜索与排序飞快',
+      't1.i2': '5 段均衡器、交叉淡化与无缝播放',
+      't1.i3': '迷你播放器、3D 可视化与同步歌词',
+      't1.i4': '面向游戏、创作与省电的性能模式',
+      't1.i5': 'Windows 10/11 原生 x64 与 ARM64 构建',
+      't1.i6': '多媒体键、快捷键、Discord 状态与触控操作',
+      't1.i7': '喜欢、播放列表、无限制的“下一首播放”队列，以及从播放列表快速复制',
+      't1.btn': '免费下载',
+      't2.badge': 'Premium',
+      't2.once': '一次性',
+      't2.note': '一份许可证 · 最多 3 台你的电脑 · 离线可用',
+      't2.i1': '免费版全部功能，另加：',
+      't2.i2': '完整 10 段均衡器，可保存自定义预设',
+      't2.i3': 'Spatial Audio 与立体声宽度效果',
+      't2.i4': 'Hi-Fi 独占模式 - 音乐直达声卡，不作任何处理',
+      't2.i5': '“不向前重复”与收听顺序',
+      't2.i6': '一夜结束时,让电脑自动睡眠或关机',
+      't2.i7': '超级喜欢，喜欢还能直接存入音乐文件',
+      't2.i8': '歌名与文件的批量复制',
+      't2.i9': '从文件资源管理器精准拖放插入',
+      't2.btn': '购买',
+      'sp.h': '支持开发',
+      'sp.p': 'lunaha 独立开发。自愿捐助用于支付开发时间、测试与发布成本。金额随意 - 每份支持都珍贵，且完全不强制。',
+      'sp.btn': '支持 lunaha',
+      'faq.h': '常见问题',
+      'faq.sub': '对大家真正会问的问题，给出简短回答。',
+      'faq.q1': 'Windows 提示“未知发布者”/ SmartScreen 警告，安全吗？',
+      'faq.a1': '安全。测试版只是尚未进行代码签名（证书对免费测试版来说很贵）。点击<em>更多信息 → 仍要运行</em>。所有下载都由同一份源码构建，且只发布在我们的 GitHub Releases 页面。稳定版将提供由 Microsoft 签名的 Microsoft Store 版本。',
+      'faq.q2': '需要联网吗？',
+      'faq.a2': "播放、音乐库和本地歌词均可离线使用。登录、购买、更新及其他在线功能需要网络连接。激活后的 Premium 也可离线使用。",
+      'faq.q3': '支持哪些 Windows 版本和设备？',
+      'faq.a3': 'Windows 10 和 11，提供 x64 与 ARM64 原生构建。骁龙笔记本原生运行 lunaha，无需模拟。',
+      'faq.q4': '有便携版吗？',
+      'faq.a4': '有。一个 zip，解压到任意位置即可运行，无需安装。非常适合 U 盘和受限的电脑。',
+      'faq.q5': '卸载后我的数据会怎样？',
+      'faq.a5': '卸载程序会询问。默认保留音乐库、喜欢和设置，之后重装即可全部恢复。你也可以选择全部清除。',
+      'faq.q6': 'Premium 许可证如何使用？',
+      'faq.a6': '一个账户，一次付费，最多 3 台自己的电脑。用你的邮箱购买，然后在应用中用同一邮箱登录 - Premium 自动激活，无需复制密钥，之后可离线使用。换新电脑很简单：在应用中移除一台，再在新电脑上登录即可。',
+      'faq.q7': 'Premium 是订阅吗？',
+      'faq.a7': '不是。一次性购买，许可证永久属于你。若未来功能增多导致价格上调，已购许可证依然有效 - 早买只是更便宜。',
+      'end.h': '总不能一直滚动吧。快去听歌。',
+      'fo.tag': 'Windows 本地优先音乐播放器。',
+      'fo.lang': '语言',
+      'fo.soc': '社交',
+      'fo.prod': '产品',
+      'fo.res': '资源',
+      'fo.com': '社区',
+      'fo.dl': '下载',
+      'legal.terms': '服务条款',
+      'legal.privacy': '隐私政策',
+      'legal.credit': 'lunaha 由 Tihomir Nyagolov 创作',
+      'legal.fine': 'lunaha 按现状提供，不含任何保证。免费版可自由使用；Premium 功能需要有效许可证。匿名使用统计默认开启，可在偏好设置中关闭。你的音乐库与收听记录绝不会被发送到任何地方 - 它们严格保留在你的电脑本地。'
+    };
+
+    (function () {
+      var LANGS = ['en', 'bg', 'de', 'es', 'fr', 'ru', 'zh'];
+      var current = 'en';
+      function t(k) {
+        var d = I18N[current] || {};
+        return d[k] != null ? d[k] : I18N.en[k];
+      }
+      function setAll(sel, k) {
+        document.querySelectorAll(sel).forEach(function (el) { el.innerHTML = t(k); });
+      }
+      function setAt(sel, i, k) {
+        var el = document.querySelectorAll(sel)[i];
+        if (el) el.innerHTML = t(k);
+      }
+      function setTitleAttr(id, k) {
+        var el = document.getElementById(id);
+        if (el) el.title = t(k);
+      }
+      function renderPill() {
+        var pill = document.querySelector('.beta-pill');
+        if (!pill) return;
+        pill.textContent = t('hero.beta') + (window.__relTag ? ' ' + window.__relTag : '') + ' · Windows 10/11 · x64 & ARM64';
+      }
+      window.__renderPill = renderPill;
+      function applyLang(lang) {
+        if (!I18N[lang]) lang = 'en';
+        current = lang;
+        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+        window.lunahaDownloadTransition(lang);
+        document.title = t('meta.title');
+        var md = document.querySelector('meta[name="description"]');
+        if (md) md.setAttribute('content', t('meta.desc'));
+        setAll('nav .links > a[href="#features"]', 'nav.features');
+        setAll('nav .links > a[href="#pricing"]', 'nav.pricing');
+        setAll('nav .links > a[href="#support"]', 'nav.donate');
+        setAll('nav .links > a[href="#faq"]', 'nav.faq');
+        var ideasLink = document.getElementById('nav-ideas');
+        if (ideasLink && ideasLink.childNodes.length) ideasLink.childNodes[0].nodeValue = t('nav.ideas');
+        setAt('.menu-label', 0, 'nav.mlabel.cat');
+        setAt('.menu-label', 1, 'nav.mlabel.proj');
+        setAll('#nav-cat-ideas', 'nav.cat.ideas');
+        setAll('#nav-cat-announcements', 'nav.cat.ann');
+        setAll('#nav-cat-general', 'nav.cat.gen');
+        setAll('#nav-cat-qa', 'nav.cat.qa');
+        setAll('#nav-gh-repo', 'nav.gh.repo');
+        setAll('#nav-gh-releases', 'nav.gh.rel');
+        setAll('#nav-gh-discussions', 'nav.gh.disc');
+        setAll('header h1', 'hero.title');
+        setAll('header .sub', 'hero.sub');
+        // :not([aria-hidden]) = translate only REAL labels, never decoration.
+        // site-glow.js injects an aria-hidden <span class="glow-clip"> sheen
+        // overlay into every [data-glow] button; a bare "#id span" selector
+        // matched it too and printed the label a SECOND time on top of itself
+        // (owner catch 2026-07-26). Decoration is aria-hidden by convention,
+        // so this guard covers any future injected span as well.
+        setAll('#dl-x64 > span:not([aria-hidden])', 'cta.dl');
+        setAll('#dl-cta > span:not([aria-hidden])', 'cta.dl');
+        setAll('.cta-row .btn-ghost', 'cta.pricing');
+        setAll('#dl-arm64', 'dl.arm64'); setTitleAttr('dl-arm64', 'dl.arm64.t');
+        setAll('#dl-portable-x64', 'dl.px64'); setTitleAttr('dl-portable-x64', 'dl.px64.t');
+        setAll('#dl-portable-arm64', 'dl.parm'); setTitleAttr('dl-portable-arm64', 'dl.parm.t');
+        setAll('#dl-all', 'dl.all');
+        setAll('.cta-note', 'cta.note');
+        var rows = document.querySelectorAll('.panel .frow');
+        [['f.eq.h', 'f.eq.p'], ['f.fx.h', 'f.fx.p'], ['f.sl.h', 'f.sl.p'], ['f.cp.h', 'f.cp.p'], ['f.sh.h', 'f.sh.p']].forEach(function (pair, i) {
+          if (!rows[i]) return;
+          rows[i].querySelector('h2').innerHTML = t(pair[0]);
+          rows[i].querySelector('p').innerHTML = t(pair[1]);
+        });
+        setAll('.languages h2', 'langs.h');
+        setAll('#features .sec-head h2', 'ft.h');
+        setAll('#features .section-sub', 'ft.sub');
+        document.querySelectorAll('#features .card').forEach(function (card, i) {
+          card.querySelector('h3').innerHTML = '<span class="dot"></span>' + t('c' + (i + 1) + '.h');
+          card.querySelector('p').innerHTML = t('c' + (i + 1) + '.p');
+        });
+        setAll('#pricing .sec-head h2', 'pr.h');
+        setAll('#pricing .section-sub', 'pr.sub');
+        var tiers = document.querySelectorAll('.tier');
+        if (tiers[0]) {
+          tiers[0].querySelector('h3').innerHTML = t('t1.h');
+          tiers[0].querySelector('.plan-note').innerHTML = t('t1.note');
+          tiers[0].querySelectorAll('ul li').forEach(function (li, i) {
+            li.innerHTML = '<span class="tick">✓</span>' + t('t1.i' + (i + 1));
+          });
+        }
+        if (tiers[1]) {
+          tiers[1].querySelector('.premium-badge').innerHTML = t('t2.badge');
+          tiers[1].querySelector('.price small').innerHTML = t('t2.once');
+          tiers[1].querySelector('.plan-note').innerHTML = t('t2.note');
+          tiers[1].querySelectorAll('ul li').forEach(function (li, i) {
+            li.innerHTML = '<span class="tick">✓</span>' + t('t2.i' + (i + 1));
+          });
+        }
+        setAll('#dl-free', 't1.btn');
+        setAll('#buy-premium', 't2.btn');
+        setAll('.support-copy h2', 'sp.h');
+        setAll('.support-copy p', 'sp.p');
+        setAll('#support-action', 'sp.btn');
+        setAll('#faq .sec-head h2', 'faq.h');
+        setAll('#faq .section-sub', 'faq.sub');
+        document.querySelectorAll('.faq-item').forEach(function (item, i) {
+          item.querySelector('.faq-q span').innerHTML = t('faq.q' + (i + 1));
+          item.querySelector('.faq-a-inner p').innerHTML = t('faq.a' + (i + 1));
+        });
+        setAll('.endcta h2', 'end.h');
+        setAt('.flabel', 0, 'fo.lang');
+        setAt('.flabel', 1, 'fo.soc');
+        setAt('.fgrid h4', 0, 'fo.prod');
+        setAt('.fgrid h4', 1, 'fo.res');
+        setAt('.fgrid h4', 2, 'fo.com');
+        setAll('#foot-download', 'fo.dl');
+        setAll('footer .fgrid a[href="#pricing"]', 'nav.pricing');
+        setAll('footer .fgrid a[href="#features"]', 'nav.features');
+        setAll('footer .fgrid a[href="#support"]', 'nav.donate');
+        setAll('footer .fgrid a[href="#faq"]', 'nav.faq');
+        setAll('#foot-ideas', 'nav.cat.ideas');
+        setAll('#foot-releases', 'nav.gh.rel');
+        setAll('#foot-discussions', 'nav.gh.disc');
+        setAll('footer .tagline', 'fo.tag');
+        setAll('.legal-links a[href="terms.html"]', 'legal.terms');
+        setAll('.legal-links a[href="privacy.html"]', 'legal.privacy');
+        setAll('.legal .credit', 'legal.credit');
+        setAll('.legal .fine', 'legal.fine');
+        renderPill();
+        var label = document.getElementById('lang-current');
+        document.querySelectorAll('.lang-menu button').forEach(function (b) {
+          var on = b.dataset.lang === lang;
+          b.classList.toggle('is-active', on);
+          if (on && label) label.textContent = b.textContent;
+        });
+        lunahaLang.save(lang);
+      }
+      document.querySelectorAll('.lang-menu button').forEach(function (b) {
+        b.addEventListener('click', function () { applyLang(b.dataset.lang); });
+      });
+      // Language detection + persistence now live in site-lang.js (shared with
+      // the legal pages so the visitor's choice is GLOBAL across the site).
+      // This page only paints its own DOM; it asks lunahaLang which language.
+      var initial = lunahaLang.detect();
+      applyLang(initial);
+      // First-visit IP fallback (only fires if the visitor still has no saved
+      // choice by the time it resolves - guarded inside lunahaLang).
+      lunahaLang.detectAsyncIp(function (byIp) { applyLang(byIp); });
+    })();
+  </script>
+  <!-- GoatCounter: privacy-friendly, cookieless page analytics (no cookie banner needed). -->
+  <script data-goatcounter="https://sonara-player.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

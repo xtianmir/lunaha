@@ -61,7 +61,6 @@
       + '.sc-foot-inner{max-width:1180px;margin:0 auto;padding:0 28px;}'
       + '.sc-fgrid{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:32px;}'
       + '@media(max-width:760px){.sc-fgrid{grid-template-columns:1fr 1fr;}}'
-      + '.sc-brand-link{display:inline-block;}'
       + '.sc-mark{display:inline-flex;align-items:flex-end;gap:3px;height:24px;}'
       + '.sc-mark i{width:4px;border-radius:2px;background:var(--accent);display:block;}'
       + '.sc-mark i:nth-child(1){height:11px;}.sc-mark i:nth-child(2){height:23px;}.sc-mark i:nth-child(3){height:16px;}.sc-mark i:nth-child(4){height:20px;}.sc-mark i:nth-child(5){height:10px;}'
@@ -146,7 +145,7 @@
     host.innerHTML = '<div class="sc-foot"><div class="sc-foot-inner"><div class="sc-fgrid">'
       // Column 1: JUST the logo mark (no wordmark, no tagline) - like home;
       // links home. Then language + social.
-      + '<div><a class="sc-brand-link" data-brand="mark" href="./" aria-label="lunaha home"></a>'
+      + '<div><a class="sc-brand-link" data-brand="lg" href="./" aria-label="lunaha home"></a>'
       + '<div class="sc-flabel" data-sc="fo.lang"></div>'
       + '<div class="sc-lang"><button type="button" class="lang-btn" aria-haspopup="listbox"><span data-sc-lang-current></span>' + CHEV + '</button>'
       + '<div class="lang-menu" role="listbox" aria-label="Site language">' + langOpts + '</div></div>'

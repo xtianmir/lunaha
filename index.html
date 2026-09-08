@@ -431,7 +431,7 @@
     .lang-menu button:hover { background: rgba(34, 211, 161, 0.14); }
     .lang-menu button.is-active { background: var(--accent); color: var(--on-accent); }
     .social { display: flex; gap: 10px; flex-wrap: wrap; }
-    /* Higher specificity than ".fgrid a" (which sets display:block + margins
+    /* Higher specificity than the footer text links (which set block + margins
        for the link columns) so the icon tiles keep their flex centering. */
     .fgrid .social a {
       width: 40px; height: 40px; border-radius: 12px;
@@ -443,7 +443,8 @@
     .fgrid .social a:hover { transform: translateY(-2px); color: var(--accent); border-color: var(--chip-border); text-decoration: none; }
     .social svg { width: 19px; height: 19px; display: block; }
     .fgrid h4 { color: var(--accent); font-size: 13.5px; font-weight: 800; margin-bottom: 13px; }
-    .fgrid a { display: block; color: var(--text); font-size: 13.5px; margin-bottom: 9px; }
+    /* Exclude the brand without raising specificity above the social buttons. */
+    .fgrid a:where(:not([data-brand])) { display: block; color: var(--text); font-size: 13.5px; margin-bottom: 9px; }
     .legal { margin-top: 44px; padding-top: 22px; border-top: 1px solid rgba(133, 145, 235, 0.14); text-align: center; }
     .legal .legal-links { margin-top: 8px; font-size: 13px; }
     .legal .legal-links a { color: var(--text-muted); font-weight: 700; margin: 0 10px; }

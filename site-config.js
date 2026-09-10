@@ -13,8 +13,8 @@
 (function () {
   var CONFIG = {
     repository: 'xtianmir/lunaha',
-    // Temporary distribution boundary until the first approved lunaha release.
-    downloadRepository: 'xtianmir/Sonara',
+    // Published Lunaha packages and ordinary updates share this repository.
+    downloadRepository: 'xtianmir/lunaha',
     priceUSD: '$9.99', // must match the Polar "lunaha Premium" USD price
     priceEUR: '€9.99', // EUR price shown to eurozone buyers by Polar
     // Set to a string (e.g. '$4.99') during a promo to flip every page at once;

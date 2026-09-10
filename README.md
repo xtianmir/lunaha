@@ -1,6 +1,6 @@
 # lunaha
 
-A music player for Windows.
+A music player for your local library.
 
 This is the official home for lunaha downloads and community discussions. The first lunaha release is being prepared.
 
